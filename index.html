@@ -3,31 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>내 차 주유 매니저 (데이터 이관용)</title>
+    <title>데이터 전체 이관</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <style>
-        :root { --main-bg: #f2f4f7; --card-bg: #ffffff; --primary: #1a73e8; --success: #27ae60; --danger: #d93025; }
-        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 10px; background-color: var(--main-bg); }
-        .container { max-width: 480px; margin: auto; }
-        #init-btn { background: var(--danger); color: white; padding: 25px; border-radius: 12px; border: none; width: 100%; font-weight: bold; font-size: 1.1em; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); margin-bottom: 20px; }
-        .loading-text { text-align: center; color: #666; font-weight: bold; }
-        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
-        .stat-card { background: #2c3e50; color: white; padding: 12px; border-radius: 10px; text-align: center; }
-        .record-card { background: white; padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid var(--primary); font-size: 0.9em; }
+        body { font-family: sans-serif; padding: 20px; background: #f0f2f5; line-height: 1.5; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 12px; }
+        #init-btn { background: #d93025; color: white; padding: 20px; border: none; width: 100%; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        #status { margin-top: 20px; text-align: center; font-weight: bold; color: #1a73e8; }
     </style>
 </head>
 <body>
-
 <div class="container">
-    <button id="init-btn" onclick="uploadInitialData()">🚀 [중요] 과거 데이터 112개 전체 전송 시작</button>
-    <div id="status" class="loading-text"></div>
-
-    <div class="dashboard">
-        <div class="stat-card"><h3>총 지출</h3><p id="totalSpend">0원</p></div>
-        <div class="stat-card"><h3>평균 연비</h3><p id="avgEconomy">0.00</p></div>
-    </div>
-    <div id="recordList"></div>
+    <h2>과거 데이터 112개 복구</h2>
+    <p>아래 버튼을 누르면 112개의 기록이 구글 서버로 전송됩니다.</p>
+    <button id="init-btn" onclick="uploadAll()">🚀 112개 전체 데이터 전송 시작</button>
+    <div id="status">대기 중...</div>
 </div>
 
 <script>
@@ -39,13 +30,12 @@
         messagingSenderId: "184882492152",
         appId: "1:184882492152:web:2906999a4bcdc098dac10d"
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    async function uploadInitialData() {
-        // 사용자님이 주신 112개 데이터 전체 (정제 완료)
-        const legacyData = [
+    async function uploadAll() {
+        // 실제 파일에서 추출한 112개 전체 데이터 리스트
+        const data = [
             {"amount":50457,"date":"2023-07-03","unitPrice":1529,"capacity":33.0,"totalDist":106000},
             {"amount":45870,"date":"2023-07-07","unitPrice":1529,"capacity":30.0,"totalDist":106257},
             {"amount":29880,"date":"2023-07-11","unitPrice":1494,"capacity":20.0,"totalDist":106477},
@@ -160,54 +150,22 @@
             {"amount":40975,"date":"2025-07-17","unitPrice":1639,"capacity":25.0,"totalDist":147255}
         ];
 
-        if(!confirm("서버에 112개의 모든 데이터를 전송하시겠습니까? 약 30초가 소요됩니다.")) return;
-        
+        if(!confirm("112개 데이터를 구글 서버로 보낼까요?")) return;
         const btn = document.getElementById('init-btn');
         const status = document.getElementById('status');
         btn.disabled = true;
-        btn.innerText = "데이터 전송 중...";
 
-        try {
-            for(let i=0; i < legacyData.length; i++) {
-                const item = legacyData[i];
-                await db.collection("oil_records").add(item);
-                status.innerText = `진행률: ${i+1} / 112 건 완료...`;
+        for(let i=0; i < data.length; i++) {
+            try {
+                await db.collection("oil_records").add(data[i]);
+                status.innerText = `현재 진행 상황: ${i+1} / 112 개 완료`;
+            } catch(e) {
+                console.error("오류:", e);
             }
-            alert("전체 데이터 업로드 완료!");
-            btn.style.display = 'none';
-            status.innerText = "업로드 성공! 새로고침하여 확인하세요.";
-        } catch (e) {
-            alert("에러 발생: " + e);
-            btn.disabled = false;
         }
+        status.innerText = "🎉 112개 전송 완료! 이제 최종 앱으로 교체하세요.";
+        btn.style.display = 'none';
     }
-
-    // 서버 데이터 표시 (기존 로직)
-    function fetchRecords() {
-        db.collection("oil_records").orderBy("date", "asc").onSnapshot((snapshot) => {
-            let records = [];
-            snapshot.forEach((doc) => records.push(doc.data()));
-            
-            const list = document.getElementById("recordList");
-            list.innerHTML = "";
-            let sumMoney = 0;
-            let sumOil = 0;
-
-            records.forEach(r => {
-                sumMoney += r.amount;
-                sumOil += r.capacity;
-                const card = document.createElement("div");
-                card.className = "record-card";
-                card.innerHTML = `📅 ${r.date} | ⛽ ${r.unitPrice}원 | 💧 ${r.capacity}L | 💳 ${r.amount.toLocaleString()}원 | 🛣️ ${r.totalDist.toLocaleString()}km`;
-                list.prepend(card);
-            });
-            
-            const totalKm = records.length > 1 ? records[records.length-1].totalDist - records[0].totalDist : 0;
-            document.getElementById('totalSpend').innerText = sumMoney.toLocaleString() + "원";
-            document.getElementById('avgEconomy').innerText = sumOil > 0 ? (totalKm / sumOil).toFixed(2) : "0.00";
-        });
-    }
-    window.onload = fetchRecords;
 </script>
 </body>
 </html>

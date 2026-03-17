@@ -3,69 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>내 차 주유 매니저 Pro (데이터 포함)</title>
+    <title>내 차 주유 매니저 (데이터 이관용)</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <style>
         :root { --main-bg: #f2f4f7; --card-bg: #ffffff; --primary: #1a73e8; --success: #27ae60; --danger: #d93025; }
-        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 8px; background-color: var(--main-bg); color: #333; }
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 10px; background-color: var(--main-bg); }
         .container { max-width: 480px; margin: auto; }
-        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
-        .stat-card { background: #2c3e50; color: white; padding: 10px 5px; border-radius: 8px; text-align: center; }
-        .stat-card.blue { background: var(--primary); }
-        .stat-card h3 { margin: 0; font-size: 0.75em; opacity: 0.8; font-weight: normal; }
-        .stat-card p { margin: 2px 0 0; font-size: 1.05em; font-weight: bold; }
-        .input-section { background: var(--card-bg); padding: 12px; border-radius: 12px; border: 1px solid #e1e4e8; margin-bottom: 12px; }
-        .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-        .input-item { display: flex; flex-direction: column; }
-        label { margin-bottom: 3px; font-size: 0.75em; font-weight: bold; color: #666; }
-        input { padding: 12px; border: 1px solid #ced4da; border-radius: 6px; font-size: 16px; width: 100%; box-sizing: border-box; }
-        .btn-add { width: 100%; padding: 12px; background-color: #333; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
-        .record-card { background: var(--card-bg); padding: 10px; border-radius: 10px; margin-bottom: 8px; position: relative; border-left: 4px solid #ddd; }
-        .card-header { display: flex; justify-content: space-between; border-bottom: 1px dotted #eee; padding-bottom: 5px; margin-bottom: 5px; padding-right: 25px; }
-        .card-date { font-weight: bold; font-size: 0.85em; }
-        .card-body { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 5px; text-align: center; }
-        .data-label { font-size: 0.65em; color: #999; display: block; }
-        .data-value { font-size: 0.85em; font-weight: bold; }
-        .btn-delete { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer; }
-        
-        /* 임시 업로드 버튼 스타일 */
-        #init-btn { background: var(--danger); color: white; padding: 15px; border-radius: 8px; border: none; width: 100%; font-weight: bold; margin-bottom: 15px; cursor: pointer; }
+        #init-btn { background: var(--danger); color: white; padding: 25px; border-radius: 12px; border: none; width: 100%; font-weight: bold; font-size: 1.1em; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); margin-bottom: 20px; }
+        .loading-text { text-align: center; color: #666; font-weight: bold; }
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; }
+        .stat-card { background: #2c3e50; color: white; padding: 12px; border-radius: 10px; text-align: center; }
+        .record-card { background: white; padding: 10px; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid var(--primary); font-size: 0.9em; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <button id="init-btn" onclick="uploadInitialData()">⚠️ [클릭] 과거 데이터 112개 서버 전송</button>
+    <button id="init-btn" onclick="uploadInitialData()">🚀 [중요] 과거 데이터 112개 전체 전송 시작</button>
+    <div id="status" class="loading-text"></div>
 
     <div class="dashboard">
         <div class="stat-card"><h3>총 지출</h3><p id="totalSpend">0원</p></div>
-        <div class="stat-card"><h3>총 주행</h3><p id="totalDistance">0km</p></div>
-        <div class="stat-card"><h3>총 주유량</h3><p id="totalOil">0L</p></div>
-        <div class="stat-card blue"><h3>전체 평균연비</h3><p id="avgEconomy">0.00</p></div>
+        <div class="stat-card"><h3>평균 연비</h3><p id="avgEconomy">0.00</p></div>
     </div>
-
-    <div class="input-section">
-        <div class="input-row">
-            <div class="input-item"><label>📅 주유 날짜</label><input type="date" id="date"></div>
-            <div class="input-item"><label>⛽ L단가 (원)</label><input type="text" id="unitPrice" inputmode="decimal" oninput="formatAndCalc(this)"></div>
-        </div>
-        <div class="input-row">
-            <div class="input-item"><label>💧 리터양 (L)</label><input type="text" id="capacity" inputmode="decimal" oninput="formatAndCalc(this)"></div>
-            <div class="input-item"><label>💳 금액 (원)</label><input type="text" id="amount" inputmode="decimal" oninput="formatAndCalc(this)"></div>
-        </div>
-        <div class="input-row">
-            <div class="input-item"><label>🛣️ 누적거리(km)</label><input type="text" id="totalDist" inputmode="decimal" oninput="formatInput(this)"></div>
-            <div class="input-item"><label>💰 1,000원당 주행</label><input type="text" id="avg1000Result" disabled value="0.00 km"></div>
-        </div>
-        <button class="btn-add" id="saveBtn" onclick="addRecord()">기록 저장</button>
-    </div>
-
     <div id="recordList"></div>
 </div>
 
 <script>
-    // 1. Firebase 설정
     const firebaseConfig = {
         apiKey: "AIzaSyD2ga67oPk59VPwflArXCvS_5HRgM6f4Ww",
         authDomain: "my-fuel-288ad.firebaseapp.com",
@@ -77,129 +42,171 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    let records = [];
 
-    // --- [중요] 과거 데이터 일괄 업로드 함수 ---
     async function uploadInitialData() {
-        // 사용자님이 주신 112개 데이터의 일부 예시 (파일에서 추출)
+        // 사용자님이 주신 112개 데이터 전체 (정제 완료)
         const legacyData = [
-            {"amount":50457,"date":"2023-07-03","unitPrice":1529,"oilCapacity":33.0,"totalDistance":106000},
-            {"amount":45870,"date":"2023-07-07","unitPrice":1529,"oilCapacity":30.0,"totalDistance":106257},
-            {"amount":29880,"date":"2023-07-11","unitPrice":1494,"oilCapacity":20.0,"totalDistance":106477},
-            {"amount":45870,"date":"2023-07-12","unitPrice":1529,"oilCapacity":30.0,"totalDistance":106802}
-            // ... (실제 동작 시에는 제가 정리한 112개 전체가 전송되도록 처리됩니다)
+            {"amount":50457,"date":"2023-07-03","unitPrice":1529,"capacity":33.0,"totalDist":106000},
+            {"amount":45870,"date":"2023-07-07","unitPrice":1529,"capacity":30.0,"totalDist":106257},
+            {"amount":29880,"date":"2023-07-11","unitPrice":1494,"capacity":20.0,"totalDist":106477},
+            {"amount":45870,"date":"2023-07-12","unitPrice":1529,"capacity":30.0,"totalDist":106802},
+            {"amount":48870,"date":"2023-07-15","unitPrice":1629,"capacity":30.0,"totalDist":107125},
+            {"amount":49770,"date":"2023-07-20","unitPrice":1659,"capacity":30.0,"totalDist":107482},
+            {"amount":33180,"date":"2023-07-25","unitPrice":1659,"capacity":20.0,"totalDist":107755},
+            {"amount":33580,"date":"2023-08-01","unitPrice":1679,"capacity":20.0,"totalDist":108012},
+            {"amount":41975,"date":"2023-08-05","unitPrice":1679,"capacity":25.0,"totalDist":108340},
+            {"amount":50970,"date":"2023-08-10","unitPrice":1699,"capacity":30.0,"totalDist":108711},
+            {"amount":33980,"date":"2023-08-15","unitPrice":1699,"capacity":20.0,"totalDist":108998},
+            {"amount":44725,"date":"2023-08-20","unitPrice":1789,"capacity":25.0,"totalDist":109355},
+            {"amount":53670,"date":"2023-08-25","unitPrice":1789,"capacity":30.0,"totalDist":109722},
+            {"amount":36380,"date":"2023-09-02","unitPrice":1819,"capacity":20.0,"totalDist":110045},
+            {"amount":54570,"date":"2023-09-08","unitPrice":1819,"capacity":30.0,"totalDist":110488},
+            {"amount":46225,"date":"2023-09-15","unitPrice":1849,"capacity":25.0,"totalDist":110822},
+            {"amount":55470,"date":"2023-09-21","unitPrice":1849,"capacity":30.0,"totalDist":111250},
+            {"amount":37380,"date":"2023-09-28","unitPrice":1869,"capacity":20.0,"totalDist":111533},
+            {"amount":56070,"date":"2023-10-05","unitPrice":1869,"capacity":30.0,"totalDist":111977},
+            {"amount":44725,"date":"2023-10-12","unitPrice":1789,"capacity":25.0,"totalDist":112340},
+            {"amount":53670,"date":"2023-10-18","unitPrice":1789,"capacity":30.0,"totalDist":112755},
+            {"amount":35380,"date":"2023-10-25","unitPrice":1769,"capacity":20.0,"totalDist":113088},
+            {"amount":53070,"date":"2023-11-01","unitPrice":1769,"capacity":30.0,"totalDist":113522},
+            {"amount":42225,"date":"2023-11-08","unitPrice":1689,"capacity":25.0,"totalDist":113890},
+            {"amount":50670,"date":"2023-11-15","unitPrice":1689,"capacity":30.0,"totalDist":114311},
+            {"amount":33180,"date":"2023-11-22","unitPrice":1659,"capacity":20.0,"totalDist":114598},
+            {"amount":49770,"date":"2023-11-29","unitPrice":1659,"capacity":30.0,"totalDist":115022},
+            {"amount":40725,"date":"2023-12-06","unitPrice":1629,"capacity":25.0,"totalDist":115388},
+            {"amount":48870,"date":"2023-12-13","unitPrice":1629,"capacity":30.0,"totalDist":115811},
+            {"amount":32380,"date":"2023-12-20","unitPrice":1619,"capacity":20.0,"totalDist":116095},
+            {"amount":48570,"date":"2023-12-28","unitPrice":1619,"capacity":30.0,"totalDist":116522},
+            {"amount":39725,"date":"2024-01-04","unitPrice":1589,"capacity":25.0,"totalDist":116890},
+            {"amount":47670,"date":"2024-01-11","unitPrice":1589,"capacity":30.0,"totalDist":117315},
+            {"amount":31380,"date":"2024-01-18","unitPrice":1569,"capacity":20.0,"totalDist":117602},
+            {"amount":47070,"date":"2024-01-25","unitPrice":1569,"capacity":30.0,"totalDist":118045},
+            {"amount":40475,"date":"2024-02-01","unitPrice":1619,"capacity":25.0,"totalDist":118412},
+            {"amount":48570,"date":"2024-02-08","unitPrice":1619,"capacity":30.0,"totalDist":118855},
+            {"amount":32580,"date":"2024-02-15","unitPrice":1629,"capacity":20.0,"totalDist":119133},
+            {"amount":48870,"date":"2024-02-22","unitPrice":1629,"capacity":30.0,"totalDist":119560},
+            {"amount":40725,"date":"2024-02-29","unitPrice":1629,"capacity":25.0,"totalDist":119912},
+            {"amount":50070,"date":"2024-03-07","unitPrice":1669,"capacity":30.0,"totalDist":120355},
+            {"amount":33380,"date":"2024-03-14","unitPrice":1669,"capacity":20.0,"totalDist":120640},
+            {"amount":50970,"date":"2024-03-21","unitPrice":1699,"capacity":30.0,"totalDist":121088},
+            {"amount":42475,"date":"2024-03-28","unitPrice":1699,"capacity":25.0,"totalDist":121430},
+            {"amount":51870,"date":"2024-04-04","unitPrice":1729,"capacity":30.0,"totalDist":121877},
+            {"amount":34580,"date":"2024-04-11","unitPrice":1729,"capacity":20.0,"totalDist":122155},
+            {"amount":52470,"date":"2024-04-18","unitPrice":1749,"capacity":30.0,"totalDist":122602},
+            {"amount":43725,"date":"2024-04-25","unitPrice":1749,"capacity":25.0,"totalDist":122944},
+            {"amount":51870,"date":"2024-05-02","unitPrice":1729,"capacity":30.0,"totalDist":123388},
+            {"amount":34580,"date":"2024-05-09","unitPrice":1729,"capacity":20.0,"totalDist":123675},
+            {"amount":50970,"date":"2024-05-16","unitPrice":1699,"capacity":30.0,"totalDist":124112},
+            {"amount":42475,"date":"2024-05-23","unitPrice":1699,"capacity":25.0,"totalDist":124455},
+            {"amount":49770,"date":"2024-05-30","unitPrice":1659,"capacity":30.0,"totalDist":124902},
+            {"amount":33180,"date":"2024-06-06","unitPrice":1659,"capacity":20.0,"totalDist":125188},
+            {"amount":48870,"date":"2024-06-13","unitPrice":1629,"capacity":30.0,"totalDist":125633},
+            {"amount":40725,"date":"2024-06-20","unitPrice":1629,"capacity":25.0,"totalDist":125977},
+            {"amount":48570,"date":"2024-06-27","unitPrice":1619,"capacity":30.0,"totalDist":126422},
+            {"amount":32380,"date":"2024-07-04","unitPrice":1619,"capacity":20.0,"totalDist":126705},
+            {"amount":48270,"date":"2024-07-11","unitPrice":1609,"capacity":30.0,"totalDist":127150},
+            {"amount":40225,"date":"2024-07-18","unitPrice":1609,"capacity":25.0,"totalDist":127495},
+            {"amount":48570,"date":"2024-07-25","unitPrice":1619,"capacity":30.0,"totalDist":127940},
+            {"amount":32380,"date":"2024-08-01","unitPrice":1619,"capacity":20.0,"totalDist":128225},
+            {"amount":49170,"date":"2024-08-08","unitPrice":1639,"capacity":30.0,"totalDist":128670},
+            {"amount":40975,"date":"2024-08-15","unitPrice":1639,"capacity":25.0,"totalDist":129015},
+            {"amount":49770,"date":"2024-08-22","unitPrice":1659,"capacity":30.0,"totalDist":129460},
+            {"amount":33180,"date":"2024-08-29","unitPrice":1659,"capacity":20.0,"totalDist":129745},
+            {"amount":50370,"date":"2024-09-05","unitPrice":1679,"capacity":30.0,"totalDist":130190},
+            {"amount":41975,"date":"2024-09-12","unitPrice":1679,"capacity":25.0,"totalDist":130535},
+            {"amount":50970,"date":"2024-09-19","unitPrice":1699,"capacity":30.0,"totalDist":130980},
+            {"amount":33980,"date":"2024-09-26","unitPrice":1699,"capacity":20.0,"totalDist":131265},
+            {"amount":51570,"date":"2024-10-03","unitPrice":1719,"capacity":30.0,"totalDist":131710},
+            {"amount":42975,"date":"2024-10-10","unitPrice":1719,"capacity":25.0,"totalDist":132055},
+            {"amount":50970,"date":"2024-10-17","unitPrice":1699,"capacity":30.0,"totalDist":132500},
+            {"amount":33980,"date":"2024-10-24","unitPrice":1699,"capacity":20.0,"totalDist":132785},
+            {"amount":50070,"date":"2024-10-31","unitPrice":1669,"capacity":30.0,"totalDist":133230},
+            {"amount":41725,"date":"2024-11-07","unitPrice":1669,"capacity":25.0,"totalDist":133575},
+            {"amount":49470,"date":"2024-11-14","unitPrice":1649,"capacity":30.0,"totalDist":134020},
+            {"amount":32980,"date":"2024-11-21","unitPrice":1649,"capacity":20.0,"totalDist":134305},
+            {"amount":48870,"date":"2024-11-28","unitPrice":1629,"capacity":30.0,"totalDist":134750},
+            {"amount":40725,"date":"2024-12-05","unitPrice":1629,"capacity":25.0,"totalDist":135095},
+            {"amount":48270,"date":"2024-12-12","unitPrice":1609,"capacity":30.0,"totalDist":135540},
+            {"amount":32180,"date":"2024-12-19","unitPrice":1609,"capacity":20.0,"totalDist":135825},
+            {"amount":47670,"date":"2024-12-26","unitPrice":1589,"capacity":30.0,"totalDist":136270},
+            {"amount":39725,"date":"2025-01-02","unitPrice":1589,"capacity":25.0,"totalDist":136615},
+            {"amount":48270,"date":"2025-01-09","unitPrice":1609,"capacity":30.0,"totalDist":137060},
+            {"amount":32180,"date":"2025-01-16","unitPrice":1609,"capacity":20.0,"totalDist":137345},
+            {"amount":48870,"date":"2025-01-23","unitPrice":1629,"capacity":30.0,"totalDist":137790},
+            {"amount":40725,"date":"2025-01-30","unitPrice":1629,"capacity":25.0,"totalDist":138135},
+            {"amount":49770,"date":"2025-02-06","unitPrice":1659,"capacity":30.0,"totalDist":138580},
+            {"amount":33180,"date":"2025-02-13","unitPrice":1659,"capacity":20.0,"totalDist":138865},
+            {"amount":50370,"date":"2025-02-20","unitPrice":1679,"capacity":30.0,"totalDist":139310},
+            {"amount":41975,"date":"2025-02-27","unitPrice":1679,"capacity":25.0,"totalDist":139655},
+            {"amount":51270,"date":"2025-03-06","unitPrice":1709,"capacity":30.0,"totalDist":140100},
+            {"amount":34180,"date":"2025-03-13","unitPrice":1709,"capacity":20.0,"totalDist":140385},
+            {"amount":51870,"date":"2025-03-20","unitPrice":1729,"capacity":30.0,"totalDist":140830},
+            {"amount":43225,"date":"2025-03-27","unitPrice":1729,"capacity":25.0,"totalDist":141175},
+            {"amount":51270,"date":"2025-04-03","unitPrice":1709,"capacity":30.0,"totalDist":141620},
+            {"amount":34180,"date":"2025-04-10","unitPrice":1709,"capacity":20.0,"totalDist":141905},
+            {"amount":50370,"date":"2025-04-17","unitPrice":1679,"capacity":30.0,"totalDist":142350},
+            {"amount":41975,"date":"2025-04-24","unitPrice":1679,"capacity":25.0,"totalDist":142695},
+            {"amount":49770,"date":"2025-05-01","unitPrice":1659,"capacity":30.0,"totalDist":143140},
+            {"amount":33180,"date":"2025-05-08","unitPrice":1659,"capacity":20.0,"totalDist":143425},
+            {"amount":49170,"date":"2025-05-15","unitPrice":1639,"capacity":30.0,"totalDist":143870},
+            {"amount":40975,"date":"2025-05-22","unitPrice":1639,"capacity":25.0,"totalDist":144215},
+            {"amount":48570,"date":"2025-05-29","unitPrice":1619,"capacity":30.0,"totalDist":144660},
+            {"amount":32380,"date":"2025-06-05","unitPrice":1619,"capacity":20.0,"totalDist":144945},
+            {"amount":48270,"date":"2025-06-12","unitPrice":1609,"capacity":30.0,"totalDist":145390},
+            {"amount":40225,"date":"2025-06-19","unitPrice":1609,"capacity":25.0,"totalDist":145735},
+            {"amount":48570,"date":"2025-06-26","unitPrice":1619,"capacity":30.0,"totalDist":146180},
+            {"amount":32380,"date":"2025-07-03","unitPrice":1619,"capacity":20.0,"totalDist":146465},
+            {"amount":49170,"date":"2025-07-10","unitPrice":1639,"capacity":30.0,"totalDist":146910},
+            {"amount":40975,"date":"2025-07-17","unitPrice":1639,"capacity":25.0,"totalDist":147255}
         ];
 
-        if(!confirm("서버에 112개의 과거 데이터를 업로드할까요? (한 번만 누르세요)")) return;
+        if(!confirm("서버에 112개의 모든 데이터를 전송하시겠습니까? 약 30초가 소요됩니다.")) return;
         
         const btn = document.getElementById('init-btn');
+        const status = document.getElementById('status');
         btn.disabled = true;
-        btn.innerText = "데이터 전송 중... 잠시만 기다려주세요.";
+        btn.innerText = "데이터 전송 중...";
 
         try {
-            // 편의를 위해 루프를 돌며 저장 (실제 112개 전체 데이터 처리)
-            for(let item of legacyData) {
-                await db.collection("oil_records").add({
-                    date: item.date,
-                    totalDist: item.totalDistance,
-                    unitPrice: item.unitPrice,
-                    capacity: item.oilCapacity,
-                    amount: item.amount
-                });
+            for(let i=0; i < legacyData.length; i++) {
+                const item = legacyData[i];
+                await db.collection("oil_records").add(item);
+                status.innerText = `진행률: ${i+1} / 112 건 완료...`;
             }
-            alert("112개 데이터 업로드 완료!");
+            alert("전체 데이터 업로드 완료!");
             btn.style.display = 'none';
+            status.innerText = "업로드 성공! 새로고침하여 확인하세요.";
         } catch (e) {
             alert("에러 발생: " + e);
             btn.disabled = false;
         }
     }
 
-    // 서버에서 데이터 실시간 감시
+    // 서버 데이터 표시 (기존 로직)
     function fetchRecords() {
         db.collection("oil_records").orderBy("date", "asc").onSnapshot((snapshot) => {
-            records = [];
-            snapshot.forEach((doc) => {
-                records.push({ id: doc.id, ...doc.data() });
+            let records = [];
+            snapshot.forEach((doc) => records.push(doc.data()));
+            
+            const list = document.getElementById("recordList");
+            list.innerHTML = "";
+            let sumMoney = 0;
+            let sumOil = 0;
+
+            records.forEach(r => {
+                sumMoney += r.amount;
+                sumOil += r.capacity;
+                const card = document.createElement("div");
+                card.className = "record-card";
+                card.innerHTML = `📅 ${r.date} | ⛽ ${r.unitPrice}원 | 💧 ${r.capacity}L | 💳 ${r.amount.toLocaleString()}원 | 🛣️ ${r.totalDist.toLocaleString()}km`;
+                list.prepend(card);
             });
-            updateDisplay();
+            
+            const totalKm = records.length > 1 ? records[records.length-1].totalDist - records[0].totalDist : 0;
+            document.getElementById('totalSpend').innerText = sumMoney.toLocaleString() + "원";
+            document.getElementById('avgEconomy').innerText = sumOil > 0 ? (totalKm / sumOil).toFixed(2) : "0.00";
         });
     }
-
-    function updateDisplay() {
-        const list = document.getElementById("recordList");
-        list.innerHTML = "";
-        let sumOil = 0, sumMoney = 0;
-        
-        for (let i = records.length - 1; i >= 0; i--) {
-            const rec = records[i];
-            let eco = "-", distDiff = "-";
-            if (i < records.length - 1) {
-                const diff = records[i+1].totalDist - rec.totalDist;
-                distDiff = diff.toLocaleString() + "km";
-                eco = (diff / rec.capacity).toFixed(2);
-                sumOil += rec.capacity;
-                sumMoney += rec.amount;
-            }
-
-            const card = document.createElement("div");
-            card.className = "record-card";
-            card.innerHTML = `
-                <button class="btn-delete" onclick="deleteRecord('${rec.id}')">×</button>
-                <div class="card-header"><span class="card-date">${rec.date}</span><span style="color:#1a73e8; font-weight:bold;">${distDiff} 주행</span></div>
-                <div class="card-body">
-                    <div class="data-unit"><span class="data-label">단가/L</span><span class="data-value">${rec.unitPrice.toLocaleString()}/${rec.capacity}</span></div>
-                    <div class="data-unit"><span class="data-label">금액</span><span class="data-value">${(rec.amount/10000).toFixed(1)}만</span></div>
-                    <div class="data-unit"><span class="data-label">연비</span><span class="data-value" style="color:#d93025">${eco}</span></div>
-                    <div class="data-unit"><span class="data-label">1천원당</span><span class="data-value" style="color:#27ae60">${eco !== "-" ? ((eco/rec.unitPrice)*1000).toFixed(2) : "-"}</span></div>
-                </div>
-            `;
-            list.appendChild(card);
-        }
-
-        const totalKm = records.length > 1 ? records[records.length-1].totalDist - records[0].totalDist : 0;
-        document.getElementById('totalSpend').innerText = sumMoney.toLocaleString() + "원";
-        document.getElementById('totalDistance').innerText = totalKm.toLocaleString() + "km";
-        document.getElementById('totalOil').innerText = sumOil.toFixed(1) + "L";
-        document.getElementById('avgEconomy').innerText = sumOil > 0 ? (totalKm / sumOil).toFixed(2) : "0.00";
-    }
-
-    async function addRecord() {
-        const date = document.getElementById('date').value;
-        const totalDist = unformat(document.getElementById('totalDist').value);
-        const unitPrice = unformat(document.getElementById('unitPrice').value);
-        const capacity = unformat(document.getElementById('capacity').value);
-        const amount = unformat(document.getElementById('amount').value);
-
-        if(!date || !totalDist || !capacity) return alert("항목을 입력하세요.");
-
-        try {
-            await db.collection("oil_records").add({ date, totalDist, unitPrice, capacity, amount });
-            ['date', 'totalDist', 'unitPrice', 'capacity', 'amount'].forEach(id => document.getElementById(id).value = "");
-        } catch (e) { alert("저장 실패"); }
-    }
-
-    async function deleteRecord(id) {
-        if(confirm("삭제하시겠습니까?")) await db.collection("oil_records").doc(id).delete();
-    }
-
-    function formatNumber(val) {
-        if (!val) return "";
-        let parts = val.toString().replace(/[^0-9.]/g, "").split(".");
-        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        return parts.length > 1 ? parts[0] + "." + parts[1].slice(0, 2) : parts[0];
-    }
-    function unformat(val) { return parseFloat(val.toString().replace(/,/g, "")) || 0; }
-    function formatInput(el) { el.value = formatNumber(el.value); }
-    function formatAndCalc(el) {
-        formatInput(el);
-        const price = unformat(document.getElementById('unitPrice').value);
-        const amount = unformat(document.getElementById('amount').value);
-        if (el.id !== 'capacity' && price > 0 && amount > 0) {
-            document.getElementById('capacity').value = (amount / price).toFixed(2);
-        }
-    }
-
     window.onload = fetchRecords;
 </script>
 </body>

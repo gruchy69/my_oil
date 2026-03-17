@@ -164,8 +164,10 @@
         for (let i = 0; i < records.length; i++) {
             const rec = records[i];
             let economy = "-", moneyEco = "-", intervalDist = "- km";
-            if (i < records.length - 1) {
-                const diff = rec.totalDist - records[i+1].totalDist;
+            // 이번 주유로 달린 거리 = 다음 주유(records[i-1]) 누적거리 - 이번(records[i]) 누적거리
+            // desc 정렬이므로 i-1이 더 최신(다음 주유)
+            if (i > 0) {
+                const diff = records[i-1].totalDist - rec.totalDist;
                 if (diff > 0 && rec.capacity > 0) {
                     economy = (diff / rec.capacity).toFixed(2);
                     moneyEco = rec.unitPrice > 0 ? ((+economy / rec.unitPrice) * 1000).toFixed(2) : "-";
@@ -281,8 +283,13 @@
 
     function renderDashboard(records) {
         let sumSpend = 0, sumOil = 0;
-        for (let i = 0; i < records.length - 1; i++) { sumSpend += records[i].amount || 0; sumOil += records[i].capacity || 0; }
-        const totalKm = records.length > 1 ? records[0].totalDist - records[records.length-1].totalDist : 0;
+        // 연비 계산 가능한 주유(다음 주유가 있는 것) = records[1] ~ records[last]
+        for (let i = 1; i < records.length; i++) {
+            sumSpend += records[i].amount   || 0;
+            sumOil   += records[i].capacity || 0;
+        }
+        const totalKm = records.length > 1
+            ? records[0].totalDist - records[records.length - 1].totalDist : 0;
         $('totalSpend').innerText    = sumSpend.toLocaleString() + "원";
         $('totalDistance').innerText = totalKm.toLocaleString() + "km";
         $('totalOil').innerText      = sumOil.toFixed(1) + "L";

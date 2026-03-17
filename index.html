@@ -3,160 +3,250 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>내 차 주유 매니저</title>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <title>슬림 주유 매니저 Pro</title>
     <style>
-        :root { --primary: #2563eb; --bg: #f8fafc; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 15px; color: #334155; }
-        .container { max-width: 500px; margin: auto; }
-        .card { background: white; padding: 18px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; }
-        .input-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-        input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box; outline: none; }
-        input:focus { border-color: var(--primary); }
-        button { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 16px; transition: 0.2s; }
-        button:active { transform: scale(0.98); opacity: 0.9; }
-        .record-header { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 10px; }
-        .record-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding: 14px 0; }
-        .record-item:last-child { border: none; }
-        .date { font-size: 12px; color: #64748b; margin-bottom: 2px; }
-        .price { font-weight: bold; color: #1e293b; font-size: 15px; }
-        .dist { text-align: right; font-size: 14px; color: #334155; }
-        #count { font-size: 13px; color: var(--primary); font-weight: bold; background: #dbeafe; padding: 4px 10px; border-radius: 20px; }
+        :root { --main-bg: #f2f4f7; --card-bg: #ffffff; --primary: #1a73e8; --success: #27ae60; --danger: #d93025; }
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 8px; background-color: var(--main-bg); color: #333; }
+        .container { max-width: 480px; margin: auto; }
+
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+        .stat-card { background: #2c3e50; color: white; padding: 8px 5px; border-radius: 8px; text-align: center; }
+        .stat-card.blue { background: var(--primary); }
+        .stat-card h3 { margin: 0; font-size: 0.7em; opacity: 0.8; font-weight: normal; }
+        .stat-card p { margin: 2px 0 0; font-size: 0.95em; font-weight: bold; }
+
+        .input-section { background: var(--card-bg); padding: 12px; border-radius: 12px; border: 1px solid #e1e4e8; margin-bottom: 12px; }
+        .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        .input-item { display: flex; flex-direction: column; }
+        label { margin-bottom: 3px; font-size: 0.75em; font-weight: bold; color: #666; }
+        input { padding: 12px; border: 1px solid #ced4da; border-radius: 6px; font-size: 16px; width: 100%; box-sizing: border-box; }
+        input:disabled { background: #f8f9fa; color: var(--success); border: 1px solid #eee; }
+        .btn-add { width: 100%; padding: 12px; background-color: #333; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; }
+        .btn-add:disabled { background: #999; cursor: not-allowed; }
+
+        .record-card { background: var(--card-bg); padding: 10px; border-radius: 10px; margin-bottom: 8px; position: relative; border-left: 4px solid #ddd; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .card-header { display: flex; justify-content: space-between; border-bottom: 1px dotted #eee; padding-bottom: 5px; margin-bottom: 5px; padding-right: 25px; }
+        .card-date { font-weight: bold; font-size: 0.85em; color: #444; }
+        .card-dist { color: #1a73e8; font-size: 0.8em; font-weight: bold; }
+        .card-body { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 5px; }
+        .data-unit { text-align: center; }
+        .data-label { font-size: 0.65em; color: #999; display: block; }
+        .data-value { font-size: 0.85em; font-weight: bold; }
+        .eco-highlight { color: var(--danger); }
+        .money-highlight { color: var(--success); }
+        .btn-delete { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer; padding: 0 5px; }
+        .status-msg { text-align: center; padding: 30px; color: #aaa; font-size: 0.9em; }
     </style>
 </head>
 <body>
-
 <div class="container">
-    <div class="card">
-        <h3 style="margin-top:0; color:#1e293b; font-size: 18px;">⛽ 새 주유 기록</h3>
-        <div class="input-group">
-            <input type="date" id="uiDate">
-            <input type="number" id="uiDist" placeholder="누적 주행거리(km)">
-        </div>
-        <div class="input-group">
-            <input type="number" id="uiAmount" placeholder="주유 금액(원)">
-            <input type="number" id="uiUnitPrice" placeholder="단가(원/L)">
-        </div>
-        <button onclick="saveData()">기록 저장하기</button>
+
+    <div class="dashboard">
+        <div class="stat-card"><h3>총 지출</h3><p id="totalSpend">0원</p></div>
+        <div class="stat-card"><h3>총 주행</h3><p id="totalDistance">0km</p></div>
+        <div class="stat-card"><h3>총 주유량</h3><p id="totalOil">0L</p></div>
+        <div class="stat-card blue"><h3>평균연비</h3><p id="avgEconomy">0.00</p></div>
     </div>
 
-    <div class="record-header">
-        <h3 style="margin:0; color:#1e293b; font-size: 18px;">📊 주유 히스토리</h3>
-        <span id="count">연결 중...</span>
+    <div class="input-section">
+        <div class="input-row">
+            <div class="input-item"><label>📅 주유 날짜</label><input type="date" id="date"></div>
+            <div class="input-item">
+                <label>⛽ L단가 (원)</label>
+                <input type="text" id="unitPrice" inputmode="decimal" placeholder="1,650">
+            </div>
+        </div>
+        <div class="input-row">
+            <div class="input-item">
+                <label>💧 리터양 (L)</label>
+                <input type="text" id="capacity" inputmode="decimal" placeholder="45.21">
+            </div>
+            <div class="input-item">
+                <label>💳 금액 (원)</label>
+                <input type="text" id="amount" inputmode="decimal" placeholder="50,000">
+            </div>
+        </div>
+        <div class="input-row">
+            <div class="input-item">
+                <label>🛣️ 누적거리(km)</label>
+                <input type="text" id="totalDist" inputmode="decimal" placeholder="계기판">
+            </div>
+            <div class="input-item"><label>💰 전체 1,000원 평균</label><input type="text" id="avg1000Result" disabled value="0.00 km"></div>
+        </div>
+        <button class="btn-add" id="btnSave">기록 저장</button>
     </div>
-    <div id="list" class="card" style="min-height: 200px;">
-        <div id="loading" style="text-align:center; padding:40px; color:#94a3b8;">데이터를 불러오는 중...</div>
-    </div>
+
+    <div id="recordList"><div class="status-msg">불러오는 중...</div></div>
 </div>
 
-<script>
-    // Firebase 초기화
-    const firebaseConfig = {
+<script type="module">
+    import { initializeApp }
+        from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot }
+        from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // ── Firebase 초기화 ──────────────────────────────────────
+    const app = initializeApp({
         apiKey: "AIzaSyD2ga67oPk59VPwflArXCvS_5HRgM6f4Ww",
         authDomain: "my-fuel-288ad.firebaseapp.com",
         projectId: "my-fuel-288ad",
         storageBucket: "my-fuel-288ad.firebasestorage.app",
         messagingSenderId: "184882492152",
         appId: "1:184882492152:web:2906999a4bcdc098dac10d"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    });
+    const db = getFirestore(app);
 
-    // 기본 날짜 설정
-    document.getElementById('uiDate').value = new Date().toISOString().substring(0, 10);
+    // ── 헬퍼 ─────────────────────────────────────────────────
+    const $ = id => document.getElementById(id);
 
-    // ✅ [버그수정1] 날짜 문자열 → 타임스탬프 변환 시 시간대 보정
-    // "2025-03-17" 입력 시 UTC 기준 자정(=KST 오전 9시)으로 저장되어
-    // 날짜가 하루 밀리는 문제 방지. dateStr은 로컬 기준으로 파싱.
-    function dateStrToTimestamp(dateStr) {
+    function fmt(val) {
+        if (!val) return "";
+        const parts = val.toString().replace(/[^0-9.]/g, "").split(".");
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        return parts.length > 1 ? parts[0] + "." + parts[1].slice(0, 2) : parts[0];
+    }
+    function unfmt(val) {
+        return parseFloat(val.toString().replace(/,/g, "")) || 0;
+    }
+    function fmtInput(el) {
+        const cursor = el.selectionStart;
+        const oldLen = el.value.length;
+        const raw = el.value.replace(/,/g, "");
+        if (isNaN(raw) && raw !== ".") return;
+        el.value = fmt(raw);
+        const diff = el.value.length - oldLen;
+        el.setSelectionRange(cursor + diff, cursor + diff);
+    }
+    function dateToTs(dateStr) {
         const [y, m, d] = dateStr.split('-').map(Number);
-        return new Date(y, m - 1, d).getTime(); // 로컬 시간 기준 자정
+        return new Date(y, m - 1, d).getTime();
     }
 
-    // ✅ [버그수정2] 타임스탬프 → 표시용 날짜 변환
-    // 기존: toLocaleDateString 후 replace 조합이 브라우저마다 다르게 동작
-    // 수정: 직접 년/월/일을 추출해 포맷팅
-    function timestampToDateStr(ts) {
-        const d = new Date(ts);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${y}-${m}-${day}`;
-    }
+    // ── 기본 날짜 ────────────────────────────────────────────
+    $('date').value = new Date().toISOString().substring(0, 10);
 
-    // 데이터 저장
-    async function saveData() {
-        const amount = Number(document.getElementById('uiAmount').value);
-        const unitPrice = Number(document.getElementById('uiUnitPrice').value);
-        const totalDist = Number(document.getElementById('uiDist').value);
-        const dateStr = document.getElementById('uiDate').value;
+    // ── 입력 이벤트 ──────────────────────────────────────────
+    ['unitPrice', 'amount', 'capacity'].forEach(id => {
+        $(id).addEventListener('input', function () {
+            fmtInput(this);
+            const price  = unfmt($('unitPrice').value);
+            const amount = unfmt($('amount').value);
+            const cap    = unfmt($('capacity').value);
+            if (id !== 'capacity') {
+                if (price > 0 && amount > 0) $('capacity').value = fmt((amount / price).toFixed(2));
+            } else {
+                if (price > 0 && cap > 0) $('amount').value = fmt(Math.round(price * cap));
+            }
+        });
+    });
+    $('totalDist').addEventListener('input', function () { fmtInput(this); });
 
-        if (!amount || !unitPrice || !totalDist || !dateStr) {
-            return alert("모든 항목을 입력해 주세요.");
-        }
+    // ── 저장 ─────────────────────────────────────────────────
+    $('btnSave').addEventListener('click', async () => {
+        const dateVal   = $('date').value;
+        const totalDist = unfmt($('totalDist').value);
+        const unitPrice = unfmt($('unitPrice').value);
+        const capacity  = unfmt($('capacity').value);
+        const amount    = unfmt($('amount').value);
 
-        // ✅ 실제 Firestore 필드명에 맞춤:
-        // amount, unitPrice, totalDist, capacity, date, regDate
-        const docData = {
-            amount: amount,
-            unitPrice: unitPrice,
-            totalDist: totalDist,
-            capacity: Number((amount / unitPrice).toFixed(2)),
-            date: dateStr,                          // "2026-03-17" 문자열
-            regDate: dateStrToTimestamp(dateStr),   // 정렬용 타임스탬프
-        };
+        if (!dateVal || !totalDist || !capacity) return alert("날짜, 누적거리, 리터양은 필수입니다.");
 
+        $('btnSave').disabled = true;
+        $('btnSave').textContent = '저장 중...';
         try {
-            await db.collection("oil_records").add(docData);
-            alert("기록되었습니다!");
-            document.getElementById('uiAmount').value = '';
-            document.getElementById('uiUnitPrice').value = '';
-            document.getElementById('uiDist').value = '';
-        } catch(e) { alert("저장 실패: " + e.message); }
-    }
+            await addDoc(collection(db, "oil_records"), {
+                date: dateVal, regDate: dateToTs(dateVal),
+                totalDist, unitPrice, capacity, amount
+            });
+            ['totalDist', 'unitPrice', 'capacity', 'amount'].forEach(id => $(id).value = "");
+            $('date').value = new Date().toISOString().substring(0, 10);
+        } catch (e) {
+            alert("저장 실패: " + e.message);
+        } finally {
+            $('btnSave').disabled = false;
+            $('btnSave').textContent = '기록 저장';
+        }
+    });
 
-    // 데이터 실시간 조회 (정렬: 최신 날짜순) — 실제 필드명 regDate 사용
-    db.collection("oil_records").orderBy("regDate", "desc").onSnapshot((snapshot) => {
-        const listDiv = document.getElementById('list');
-        document.getElementById('count').innerText = `총 ${snapshot.size}건`;
+    // ── 실시간 구독 ──────────────────────────────────────────
+    const q = query(collection(db, "oil_records"), orderBy("regDate", "asc"));
+    onSnapshot(q, snapshot => {
+        const records = snapshot.docs.map(d => ({ _id: d.id, ...d.data() }));
+        renderList(records);
+        renderDashboard(records);
+    }, err => {
+        console.error(err);
+        $('recordList').innerHTML = `<div class="status-msg" style="color:red;">
+            오류: ${err.message}
+            ${err.message.includes("index")
+                ? '<br><a href="https://console.firebase.google.com/project/my-fuel-288ad/firestore/indexes" target="_blank">👉 인덱스 생성</a>'
+                : ''}
+        </div>`;
+    });
 
-        if (snapshot.empty) {
-            listDiv.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8;">기록이 없습니다.</div>';
+    // ── 리스트 렌더 ──────────────────────────────────────────
+    function renderList(records) {
+        const container = $('recordList');
+        if (!records.length) {
+            container.innerHTML = '<div class="status-msg">기록이 없습니다.</div>';
             return;
         }
-
         let html = '';
-        snapshot.forEach(doc => {
-            const d = doc.data();
-
-            // 날짜: date 문자열 필드 우선, 없으면 regDate 타임스탬프에서 변환
-            const dateDisplay = d.date || timestampToDateStr(d.regDate);
-
+        for (let i = records.length - 1; i >= 0; i--) {
+            const rec = records[i];
+            let economy = "-", moneyEco = "-", intervalDist = "- km";
+            if (i > 0) {
+                const diff = rec.totalDist - records[i - 1].totalDist;
+                if (diff > 0 && rec.capacity > 0) {
+                    economy      = (diff / rec.capacity).toFixed(2);
+                    moneyEco     = rec.unitPrice > 0 ? ((+economy / rec.unitPrice) * 1000).toFixed(2) : "-";
+                    intervalDist = diff.toLocaleString() + "km";
+                }
+            }
             html += `
-            <div class="record-item">
-                <div>
-                    <div class="date">${dateDisplay}</div>
-                    <div class="price">${Number(d.amount).toLocaleString()}원 (${d.capacity}L)</div>
+            <div class="record-card" style="border-left-color:${economy !== '-' ? '#27ae60' : '#ddd'}">
+                <button class="btn-delete" data-id="${rec._id}">×</button>
+                <div class="card-header">
+                    <span class="card-date">${rec.date || ''}</span>
+                    <span class="card-dist">${intervalDist} 달림</span>
                 </div>
-                <div class="dist">
-                    <div style="font-weight:600;">${Number(d.totalDist).toLocaleString()} km</div>
-                    <div style="font-size:11px; color:#94a3b8;">@ ${Number(d.unitPrice).toLocaleString()}원/L</div>
+                <div class="card-body">
+                    <div class="data-unit"><span class="data-label">단가/리터</span><span class="data-value">${Number(rec.unitPrice).toLocaleString()}/${rec.capacity}</span></div>
+                    <div class="data-unit"><span class="data-label">금액</span><span class="data-value">${(rec.amount / 10000).toFixed(1)}만</span></div>
+                    <div class="data-unit"><span class="data-label">연비</span><span class="data-value eco-highlight">${economy}</span></div>
+                    <div class="data-unit"><span class="data-label">1,000원</span><span class="data-value money-highlight">${moneyEco}</span></div>
                 </div>
             </div>`;
+        }
+        container.innerHTML = html;
+
+        // 삭제 버튼 — innerHTML 교체 후 재등록
+        container.querySelectorAll('.btn-delete').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if (!confirm("기록을 삭제하시겠습니까?")) return;
+                try { await deleteDoc(doc(db, "oil_records", btn.dataset.id)); }
+                catch (e) { alert("삭제 실패: " + e.message); }
+            });
         });
+    }
 
-        listDiv.innerHTML = html;
+    // ── 대시보드 렌더 ────────────────────────────────────────
+    function renderDashboard(records) {
+        let sumSpend = 0, sumOil = 0;
+        for (let i = 1; i < records.length; i++) {
+            sumSpend += records[i].amount   || 0;
+            sumOil   += records[i].capacity || 0;
+        }
+        const totalKm = records.length > 1
+            ? records[records.length - 1].totalDist - records[0].totalDist : 0;
 
-    }, (err) => {
-        console.error(err);
-        const msg = err.message.includes("index")
-            ? `정렬 인덱스가 필요합니다.<br>
-               <a href="https://console.firebase.google.com/project/my-fuel-288ad/firestore/indexes" target="_blank" style="color:#2563eb;">
-               👉 Firebase 콘솔에서 인덱스 생성</a>`
-            : `오류: ${err.message}`;
-        document.getElementById('list').innerHTML = `<div style="padding:20px; font-size:13px; color:red;">${msg}</div>`;
-    });
+        $('totalSpend').innerText    = sumSpend.toLocaleString() + "원";
+        $('totalDistance').innerText = totalKm.toLocaleString() + "km";
+        $('totalOil').innerText      = sumOil.toFixed(1) + "L";
+        $('avgEconomy').innerText    = sumOil > 0 ? (totalKm / sumOil).toFixed(2) : "0.00";
+        $('avg1000Result').value     = sumSpend > 0
+            ? ((totalKm / sumSpend) * 1000).toFixed(2) + " km" : "0.00 km";
+    }
 </script>
 </body>
 </html>

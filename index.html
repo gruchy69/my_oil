@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>내 차 주유 매니저</title>
+    <title>내 차 주유 매니저 Pro</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <style>
         :root { --main-bg: #f2f4f7; --card-bg: #ffffff; --primary: #1a73e8; --success: #27ae60; --danger: #d93025; }
         body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 8px; background-color: var(--main-bg); color: #333; }
@@ -18,14 +20,15 @@
         .input-item { display: flex; flex-direction: column; }
         label { margin-bottom: 3px; font-size: 0.75em; font-weight: bold; color: #666; }
         input { padding: 12px; border: 1px solid #ced4da; border-radius: 6px; font-size: 16px; width: 100%; box-sizing: border-box; }
-        .btn-add { width: 100%; padding: 12px; background-color: #333; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; }
+        .btn-add { width: 100%; padding: 12px; background-color: #333; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
         .record-card { background: var(--card-bg); padding: 10px; border-radius: 10px; margin-bottom: 8px; position: relative; border-left: 4px solid #ddd; }
         .card-header { display: flex; justify-content: space-between; border-bottom: 1px dotted #eee; padding-bottom: 5px; margin-bottom: 5px; padding-right: 25px; }
         .card-date { font-weight: bold; font-size: 0.85em; }
         .card-body { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 5px; text-align: center; }
         .data-label { font-size: 0.65em; color: #999; display: block; }
         .data-value { font-size: 0.85em; font-weight: bold; }
-        .btn-delete { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #ccc; font-size: 18px; }
+        .btn-delete { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer; }
+        #loading { text-align: center; padding: 20px; color: #666; font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -49,66 +52,43 @@
         </div>
         <div class="input-row">
             <div class="input-item"><label>🛣️ 누적거리(km)</label><input type="text" id="totalDist" inputmode="decimal" oninput="formatInput(this)"></div>
-            <div class="input-item"><label>💰 1,000원당 주행</label><input type="text" id="avg1000Result" disabled></div>
+            <div class="input-item"><label>💰 1,000원당 주행</label><input type="text" id="avg1000Result" disabled value="0.00 km"></div>
         </div>
-        <button class="btn-add" onclick="addRecord()">기록 저장</button>
+        <button class="btn-add" id="saveBtn" onclick="addRecord()">기록 저장</button>
     </div>
+
+    <div id="loading">데이터를 불러오는 중...</div>
     <div id="recordList"></div>
 </div>
 
 <script>
+    // 1. Firebase 설정 (사용자님이 주신 정보 적용)
+    const firebaseConfig = {
+        apiKey: "AIzaSyD2ga67oPk59VPwflArXCvS_5HRgM6f4Ww",
+        authDomain: "my-fuel-288ad.firebaseapp.com",
+        projectId: "my-fuel-288ad",
+        storageBucket: "my-fuel-288ad.firebasestorage.app",
+        messagingSenderId: "184882492152",
+        appId: "1:184882492152:web:2906999a4bcdc098dac10d"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
     let records = [];
 
-    // 112개 과거 데이터 연동 (날짜 변환 포함)
-    const initialData = [
-        {"date": "2023-07-03", "totalDist": 106000, "unitPrice": 1529, "capacity": 33.0, "amount": 50457},
-        {"date": "2023-07-07", "totalDist": 106257, "unitPrice": 1529, "capacity": 30.0, "amount": 45870},
-        {"date": "2023-07-11", "totalDist": 106477, "unitPrice": 1494, "capacity": 20.0, "amount": 29880},
-        // ... (이하 112개 데이터가 내부적으로 정렬되어 로드됩니다)
-    ];
-
-    function loadData() {
-        // 올려주신 파일을 기반으로 데이터 배열을 채우는 로직
-        // 여기서는 예시로 상위 데이터만 넣었지만, 실제 파일의 모든 데이터를 배열에 담으시면 됩니다.
-        initialData.forEach(d => records.push({id: Date.now() + Math.random(), ...d}));
-        records.sort((a, b) => new Date(a.date) - new Date(b.date));
-        updateDisplay();
+    // 2. 서버에서 데이터 가져오기
+    function fetchRecords() {
+        db.collection("oil_records").orderBy("date", "asc").onSnapshot((snapshot) => {
+            records = [];
+            snapshot.forEach((doc) => {
+                records.push({ id: doc.id, ...doc.data() });
+            });
+            document.getElementById('loading').style.display = 'none';
+            updateDisplay();
+        });
     }
 
-    function formatNumber(val) {
-        if (!val) return "";
-        return val.toString().replace(/[^0-9.]/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    }
-
-    function unformat(val) { return parseFloat(val.toString().replace(/,/g, "")) || 0; }
-
-    function formatInput(el) { el.value = formatNumber(el.value); }
-
-    function formatAndCalc(el) {
-        formatInput(el);
-        const price = unformat(document.getElementById('unitPrice').value);
-        const amount = unformat(document.getElementById('amount').value);
-        const capEl = document.getElementById('capacity');
-        if (el.id !== 'capacity' && price > 0 && amount > 0) {
-            capEl.value = (amount / price).toFixed(2);
-        }
-    }
-
-    function addRecord() {
-        const date = document.getElementById('date').value;
-        const totalDist = unformat(document.getElementById('totalDist').value);
-        const unitPrice = unformat(document.getElementById('unitPrice').value);
-        const capacity = unformat(document.getElementById('capacity').value);
-        const amount = unformat(document.getElementById('amount').value);
-
-        if(!date || !totalDist || !capacity) return alert("필수 항목을 입력하세요.");
-
-        records.push({ id: Date.now(), date, totalDist, unitPrice, capacity, amount });
-        records.sort((a, b) => new Date(a.date) - new Date(b.date));
-        updateDisplay();
-        ['date', 'totalDist', 'unitPrice', 'capacity', 'amount'].forEach(id => document.getElementById(id).value = "");
-    }
-
+    // 3. 화면 업데이트 및 통계 계산
     function updateDisplay() {
         const list = document.getElementById("recordList");
         list.innerHTML = "";
@@ -119,30 +99,87 @@
             let eco = "-", distDiff = "-";
             if (i < records.length - 1) {
                 const diff = records[i+1].totalDist - rec.totalDist;
-                distDiff = diff + "km";
+                distDiff = diff.toLocaleString() + "km";
                 eco = (diff / rec.capacity).toFixed(2);
                 sumOil += rec.capacity;
                 sumMoney += rec.amount;
             }
+
             const card = document.createElement("div");
             card.className = "record-card";
             card.innerHTML = `
-                <div class="card-header"><span class="card-date">${rec.date}</span><span>${distDiff} 주행</span></div>
+                <button class="btn-delete" onclick="deleteRecord('${rec.id}')">×</button>
+                <div class="card-header"><span class="card-date">${rec.date}</span><span style="color:#1a73e8; font-weight:bold;">${distDiff} 주행</span></div>
                 <div class="card-body">
-                    <div class="data-unit"><span class="data-label">단가/리터</span><span class="data-value">${rec.unitPrice}/${rec.capacity}</span></div>
+                    <div class="data-unit"><span class="data-label">단가/L</span><span class="data-value">${rec.unitPrice.toLocaleString()}/${rec.capacity}</span></div>
                     <div class="data-unit"><span class="data-label">금액</span><span class="data-value">${(rec.amount/10000).toFixed(1)}만</span></div>
-                    <div class="data-unit"><span class="data-label">연비</span><span class="data-value">${eco}</span></div>
+                    <div class="data-unit"><span class="data-label">연비</span><span class="data-value" style="color:#d93025">${eco}</span></div>
+                    <div class="data-unit"><span class="data-label">1천원당</span><span class="data-value" style="color:#27ae60">${eco !== "-" ? ((eco/rec.unitPrice)*1000).toFixed(2) : "-"}</span></div>
                 </div>
             `;
             list.appendChild(card);
         }
+
         const totalKm = records.length > 1 ? records[records.length-1].totalDist - records[0].totalDist : 0;
         document.getElementById('totalSpend').innerText = sumMoney.toLocaleString() + "원";
         document.getElementById('totalDistance').innerText = totalKm.toLocaleString() + "km";
         document.getElementById('totalOil').innerText = sumOil.toFixed(1) + "L";
         document.getElementById('avgEconomy').innerText = sumOil > 0 ? (totalKm / sumOil).toFixed(2) : "0.00";
     }
-    window.onload = loadData;
+
+    // 4. 새 기록 서버에 저장
+    async function addRecord() {
+        const date = document.getElementById('date').value;
+        const totalDist = unformat(document.getElementById('totalDist').value);
+        const unitPrice = unformat(document.getElementById('unitPrice').value);
+        const capacity = unformat(document.getElementById('capacity').value);
+        const amount = unformat(document.getElementById('amount').value);
+
+        if(!date || !totalDist || !capacity) return alert("필수 항목을 입력하세요.");
+
+        const btn = document.getElementById('saveBtn');
+        btn.disabled = true;
+        btn.innerText = "저장 중...";
+
+        try {
+            await db.collection("oil_records").add({ date, totalDist, unitPrice, capacity, amount });
+            ['date', 'totalDist', 'unitPrice', 'capacity', 'amount'].forEach(id => document.getElementById(id).value = "");
+            alert("저장 완료!");
+        } catch (e) {
+            alert("저장 실패: " + e);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "기록 저장";
+        }
+    }
+
+    // 5. 기록 삭제
+    async function deleteRecord(id) {
+        if(confirm("정말 삭제하시겠습니까?")) {
+            await db.collection("oil_records").doc(id).delete();
+        }
+    }
+
+    // --- 유틸리티 (콤마 및 계산) ---
+    function formatNumber(val) {
+        if (!val) return "";
+        let num = val.toString().replace(/[^0-9.]/g, "");
+        let parts = num.split(".");
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        return parts.length > 1 ? parts[0] + "." + parts[1].slice(0, 2) : parts[0];
+    }
+    function unformat(val) { return parseFloat(val.toString().replace(/,/g, "")) || 0; }
+    function formatInput(el) { el.value = formatNumber(el.value); }
+    function formatAndCalc(el) {
+        formatInput(el);
+        const price = unformat(document.getElementById('unitPrice').value);
+        const amount = unformat(document.getElementById('amount').value);
+        if (el.id !== 'capacity' && price > 0 && amount > 0) {
+            document.getElementById('capacity').value = (amount / price).toFixed(2);
+        }
+    }
+
+    window.onload = fetchRecords;
 </script>
 </body>
 </html>

@@ -146,7 +146,8 @@
     });
 
     // 실시간 구독
-    const q = query(collection(db, "oil_records"), orderBy("regDate", "desc"));
+    // date 문자열("2026-01-22") 기준 정렬 — regDate는 저장 시각이라 믿을 수 없음
+    const q = query(collection(db, "oil_records"), orderBy("date", "desc"));
     onSnapshot(q, snapshot => {
         const records = snapshot.docs.map(d => ({ _id: d.id, ...d.data() }));
         renderList(records);

@@ -36,7 +36,7 @@
         </div>
         <div class="input-group">
             <input type="number" id="uiAmount" placeholder="주유 금액(원)">
-            <input type="number" id="uiUnitPrice" placeholder="단가(원)">
+            <input type="number" id="uiUnitPrice" placeholder="단가(원/L)">
         </div>
         <button onclick="saveData()">기록 저장하기</button>
     </div>
@@ -66,21 +66,44 @@
     // 기본 날짜 설정
     document.getElementById('uiDate').value = new Date().toISOString().substring(0, 10);
 
+    // ✅ [버그수정1] 날짜 문자열 → 타임스탬프 변환 시 시간대 보정
+    // "2025-03-17" 입력 시 UTC 기준 자정(=KST 오전 9시)으로 저장되어
+    // 날짜가 하루 밀리는 문제 방지. dateStr은 로컬 기준으로 파싱.
+    function dateStrToTimestamp(dateStr) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d).getTime(); // 로컬 시간 기준 자정
+    }
+
+    // ✅ [버그수정2] 타임스탬프 → 표시용 날짜 변환
+    // 기존: toLocaleDateString 후 replace 조합이 브라우저마다 다르게 동작
+    // 수정: 직접 년/월/일을 추출해 포맷팅
+    function timestampToDateStr(ts) {
+        const d = new Date(ts);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
     // 데이터 저장
     async function saveData() {
         const amount = Number(document.getElementById('uiAmount').value);
-        const literAmount = Number(document.getElementById('uiUnitPrice').value);
+        // ✅ [버그수정3] 변수명 통일: unitPrice (단가)로 명확하게
+        const unitPrice = Number(document.getElementById('uiUnitPrice').value);
         const totalDistance = Number(document.getElementById('uiDist').value);
         const dateStr = document.getElementById('uiDate').value;
 
-        if(!amount || !literAmount || !totalDistance) return alert("모든 항목을 입력해 주세요.");
+        if (!amount || !unitPrice || !totalDistance || !dateStr) {
+            return alert("모든 항목을 입력해 주세요.");
+        }
 
         const docData = {
-            amount: amount,
-            literAmount: literAmount,
-            totalDistance: totalDistance,
-            oilCapacity: Number((amount / literAmount).toFixed(2)),
-            refuelDate: new Date(dateStr).getTime() // 타임스탬프로 저장하여 정렬 가능케 함
+            amount: amount,                                         // 주유 금액(원)
+            unitPrice: unitPrice,                                   // 단가(원/L) ← literAmount → unitPrice로 명칭 통일
+            totalDistance: totalDistance,                           // 누적 주행거리(km)
+            oilCapacity: Number((amount / unitPrice).toFixed(2)),   // 주유량(L)
+            refuelDate: dateStrToTimestamp(dateStr),                // ✅ 로컬 시간 기준 타임스탬프
+            dateStr: dateStr                                        // ✅ 원본 날짜 문자열도 함께 저장 (디버깅/표시용)
         };
 
         try {
@@ -96,37 +119,46 @@
     db.collection("oil_records").orderBy("refuelDate", "desc").onSnapshot((snapshot) => {
         const listDiv = document.getElementById('list');
         document.getElementById('count').innerText = `총 ${snapshot.size}건`;
-        
-        let html = '';
-        if (snapshot.empty) {
-            html = '<div style="text-align:center; padding:40px; color:#94a3b8;">기록이 없습니다.</div>';
-        } else {
-            snapshot.forEach(doc => {
-                const d = doc.data();
-                // 타임스탬프를 가독성 좋은 날짜로 변환
-                const date = new Date(d.refuelDate).toLocaleDateString('ko-KR', {
-                    year: 'numeric', month: '2-digit', day: '2-digit'
-                }).replace(/\. /g, '-').replace('.', '');
 
-                html += `
-                <div class="record-item">
-                    <div>
-                        <div class="date">${date}</div>
-                        <div class="price">${Number(d.amount).toLocaleString()}원 (${d.oilCapacity}L)</div>
-                    </div>
-                    <div class="dist">
-                        <div style="font-weight:600;">${Number(d.totalDistance).toLocaleString()} km</div>
-                        <div style="font-size:11px; color:#94a3b8;">@ ${Number(d.literAmount).toLocaleString()}원</div>
-                    </div>
-                </div>`;
-            });
+        if (snapshot.empty) {
+            listDiv.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8;">기록이 없습니다.</div>';
+            return;
         }
+
+        let html = '';
+        snapshot.forEach(doc => {
+            const d = doc.data();
+
+            // ✅ [버그수정4] 날짜 표시: dateStr 필드가 있으면 그대로, 없으면 타임스탬프에서 변환
+            // 기존 데이터(dateStr 없는 레코드)와 신규 데이터 모두 호환
+            const dateDisplay = d.dateStr || timestampToDateStr(d.refuelDate);
+
+            // ✅ [버그수정5] 단가 필드: 신규(unitPrice) / 구(literAmount) 모두 호환
+            const unitPriceVal = d.unitPrice ?? d.literAmount ?? 0;
+
+            html += `
+            <div class="record-item">
+                <div>
+                    <div class="date">${dateDisplay}</div>
+                    <div class="price">${Number(d.amount).toLocaleString()}원 (${d.oilCapacity}L)</div>
+                </div>
+                <div class="dist">
+                    <div style="font-weight:600;">${Number(d.totalDistance).toLocaleString()} km</div>
+                    <div style="font-size:11px; color:#94a3b8;">@ ${Number(unitPriceVal).toLocaleString()}원/L</div>
+                </div>
+            </div>`;
+        });
+
         listDiv.innerHTML = html;
+
     }, (err) => {
         console.error(err);
-        if(err.message.includes("index")) {
-            document.getElementById('list').innerHTML = `<div style="padding:20px; font-size:12px; color:red;">정렬 인덱스 설정이 필요합니다. 관리자 콘솔 확인이 필요합니다.</div>`;
-        }
+        const msg = err.message.includes("index")
+            ? `정렬 인덱스가 필요합니다.<br>
+               <a href="https://console.firebase.google.com/project/my-fuel-288ad/firestore/indexes" target="_blank" style="color:#2563eb;">
+               👉 Firebase 콘솔에서 인덱스 생성</a>`
+            : `오류: ${err.message}`;
+        document.getElementById('list').innerHTML = `<div style="padding:20px; font-size:13px; color:red;">${msg}</div>`;
     });
 </script>
 </body>

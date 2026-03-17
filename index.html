@@ -35,7 +35,14 @@
         .eco-highlight { color: var(--danger); }
         .money-highlight { color: var(--success); }
         .btn-delete { position: absolute; top: 8px; right: 8px; background: none; border: none; color: #ccc; font-size: 18px; cursor: pointer; padding: 0 5px; }
+        .btn-edit { position: absolute; top: 8px; right: 34px; background: none; border: none; color: #bbb; font-size: 13px; cursor: pointer; padding: 0 5px; }
+        .btn-edit:hover { color: var(--primary); }
         .status-msg { text-align: center; padding: 30px; color: #aaa; font-size: 0.9em; }
+        .input-section.edit-mode { border: 2px solid var(--primary); }
+        .edit-banner { display: none; text-align: center; font-size: 0.8em; color: var(--primary); font-weight: bold; margin-bottom: 8px; background: #e8f0fe; padding: 6px; border-radius: 6px; }
+        .input-section.edit-mode .edit-banner { display: block; }
+        .btn-cancel { width: 100%; padding: 10px; background: #eee; color: #555; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 6px; display: none; }
+        .input-section.edit-mode .btn-cancel { display: block; }
     </style>
 </head>
 <body>
@@ -48,7 +55,8 @@
         <div class="stat-card blue"><h3>평균연비</h3><p id="avgEconomy">0.00</p></div>
     </div>
 
-    <div class="input-section">
+    <div class="input-section" id="inputSection">
+        <div class="edit-banner" id="editBanner">✏️ 수정 모드 — 변경 후 저장하세요</div>
         <div class="input-row">
             <div class="input-item"><label>📅 주유 날짜</label><input type="date" id="date"></div>
             <div class="input-item">
@@ -74,6 +82,7 @@
             <div class="input-item"><label>💰 전체 1,000원 평균</label><input type="text" id="avg1000Result" disabled value="0.00 km"></div>
         </div>
         <button class="btn-add" id="btnSave">기록 저장</button>
+        <button class="btn-cancel" id="btnCancel">✕ 수정 취소</button>
     </div>
 
     <div id="recordList"><div class="status-msg">불러오는 중...</div></div>
@@ -82,7 +91,7 @@
 <script type="module">
     import { initializeApp }
         from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot }
+    import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, query, orderBy, onSnapshot }
         from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     // ── Firebase 초기화 ──────────────────────────────────────
@@ -141,6 +150,31 @@
     });
     $('totalDist').addEventListener('input', function () { fmtInput(this); });
 
+    // ── 수정 상태 ────────────────────────────────────────────
+    let editingId = null; // 수정 중인 문서 ID (null이면 신규 저장 모드)
+
+    function enterEditMode(rec) {
+        editingId = rec._id;
+        $('date').value      = rec.date || '';
+        $('unitPrice').value = fmt(rec.unitPrice);
+        $('capacity').value  = fmt(rec.capacity);
+        $('amount').value    = fmt(rec.amount);
+        $('totalDist').value = fmt(rec.totalDist);
+        $('inputSection').classList.add('edit-mode');
+        $('btnSave').textContent = '수정 저장';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function exitEditMode() {
+        editingId = null;
+        ['totalDist', 'unitPrice', 'capacity', 'amount'].forEach(id => $(id).value = "");
+        $('date').value = new Date().toISOString().substring(0, 10);
+        $('inputSection').classList.remove('edit-mode');
+        $('btnSave').textContent = '기록 저장';
+    }
+
+    $('btnCancel').addEventListener('click', exitEditMode);
+
     // ── 저장 ─────────────────────────────────────────────────
     $('btnSave').addEventListener('click', async () => {
         const dateVal   = $('date').value;
@@ -152,19 +186,26 @@
         if (!dateVal || !totalDist || !capacity) return alert("날짜, 누적거리, 리터양은 필수입니다.");
 
         $('btnSave').disabled = true;
-        $('btnSave').textContent = '저장 중...';
+        $('btnSave').textContent = editingId ? '수정 중...' : '저장 중...';
+
+        const data = { date: dateVal, regDate: dateToTs(dateVal), totalDist, unitPrice, capacity, amount };
+
         try {
-            await addDoc(collection(db, "oil_records"), {
-                date: dateVal, regDate: dateToTs(dateVal),
-                totalDist, unitPrice, capacity, amount
-            });
-            ['totalDist', 'unitPrice', 'capacity', 'amount'].forEach(id => $(id).value = "");
-            $('date').value = new Date().toISOString().substring(0, 10);
+            if (editingId) {
+                // 수정 모드: 기존 문서 업데이트
+                await updateDoc(doc(db, "oil_records", editingId), data);
+                exitEditMode();
+            } else {
+                // 신규 저장
+                await addDoc(collection(db, "oil_records"), data);
+                ['totalDist', 'unitPrice', 'capacity', 'amount'].forEach(id => $(id).value = "");
+                $('date').value = new Date().toISOString().substring(0, 10);
+            }
         } catch (e) {
             alert("저장 실패: " + e.message);
         } finally {
             $('btnSave').disabled = false;
-            $('btnSave').textContent = '기록 저장';
+            $('btnSave').textContent = editingId ? '수정 저장' : '기록 저장';
         }
     });
 
@@ -205,6 +246,7 @@
             }
             html += `
             <div class="record-card" style="border-left-color:${economy !== '-' ? '#27ae60' : '#ddd'}">
+                <button class="btn-edit" data-idx="${i}">✏️</button>
                 <button class="btn-delete" data-id="${rec._id}">×</button>
                 <div class="card-header">
                     <span class="card-date">${rec.date || ''}</span>
@@ -219,6 +261,14 @@
             </div>`;
         }
         container.innerHTML = html;
+
+        // 수정 버튼 이벤트
+        container.querySelectorAll('.btn-edit').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.idx);
+                enterEditMode(records[idx]);
+            });
+        });
 
         // 삭제 버튼 — innerHTML 교체 후 재등록
         container.querySelectorAll('.btn-delete').forEach(btn => {

@@ -88,22 +88,23 @@
     // 데이터 저장
     async function saveData() {
         const amount = Number(document.getElementById('uiAmount').value);
-        // ✅ [버그수정3] 변수명 통일: unitPrice (단가)로 명확하게
         const unitPrice = Number(document.getElementById('uiUnitPrice').value);
-        const totalDistance = Number(document.getElementById('uiDist').value);
+        const totalDist = Number(document.getElementById('uiDist').value);
         const dateStr = document.getElementById('uiDate').value;
 
-        if (!amount || !unitPrice || !totalDistance || !dateStr) {
+        if (!amount || !unitPrice || !totalDist || !dateStr) {
             return alert("모든 항목을 입력해 주세요.");
         }
 
+        // ✅ 실제 Firestore 필드명에 맞춤:
+        // amount, unitPrice, totalDist, capacity, date, regDate
         const docData = {
-            amount: amount,                                         // 주유 금액(원)
-            unitPrice: unitPrice,                                   // 단가(원/L) ← literAmount → unitPrice로 명칭 통일
-            totalDistance: totalDistance,                           // 누적 주행거리(km)
-            oilCapacity: Number((amount / unitPrice).toFixed(2)),   // 주유량(L)
-            refuelDate: dateStrToTimestamp(dateStr),                // ✅ 로컬 시간 기준 타임스탬프
-            dateStr: dateStr                                        // ✅ 원본 날짜 문자열도 함께 저장 (디버깅/표시용)
+            amount: amount,
+            unitPrice: unitPrice,
+            totalDist: totalDist,
+            capacity: Number((amount / unitPrice).toFixed(2)),
+            date: dateStr,                          // "2026-03-17" 문자열
+            regDate: dateStrToTimestamp(dateStr),   // 정렬용 타임스탬프
         };
 
         try {
@@ -115,8 +116,8 @@
         } catch(e) { alert("저장 실패: " + e.message); }
     }
 
-    // 데이터 실시간 조회 (정렬: 최신 날짜순)
-    db.collection("oil_records").orderBy("refuelDate", "desc").onSnapshot((snapshot) => {
+    // 데이터 실시간 조회 (정렬: 최신 날짜순) — 실제 필드명 regDate 사용
+    db.collection("oil_records").orderBy("regDate", "desc").onSnapshot((snapshot) => {
         const listDiv = document.getElementById('list');
         document.getElementById('count').innerText = `총 ${snapshot.size}건`;
 
@@ -129,22 +130,18 @@
         snapshot.forEach(doc => {
             const d = doc.data();
 
-            // ✅ [버그수정4] 날짜 표시: dateStr 필드가 있으면 그대로, 없으면 타임스탬프에서 변환
-            // 기존 데이터(dateStr 없는 레코드)와 신규 데이터 모두 호환
-            const dateDisplay = d.dateStr || timestampToDateStr(d.refuelDate);
-
-            // ✅ [버그수정5] 단가 필드: 신규(unitPrice) / 구(literAmount) 모두 호환
-            const unitPriceVal = d.unitPrice ?? d.literAmount ?? 0;
+            // 날짜: date 문자열 필드 우선, 없으면 regDate 타임스탬프에서 변환
+            const dateDisplay = d.date || timestampToDateStr(d.regDate);
 
             html += `
             <div class="record-item">
                 <div>
                     <div class="date">${dateDisplay}</div>
-                    <div class="price">${Number(d.amount).toLocaleString()}원 (${d.oilCapacity}L)</div>
+                    <div class="price">${Number(d.amount).toLocaleString()}원 (${d.capacity}L)</div>
                 </div>
                 <div class="dist">
-                    <div style="font-weight:600;">${Number(d.totalDistance).toLocaleString()} km</div>
-                    <div style="font-size:11px; color:#94a3b8;">@ ${Number(unitPriceVal).toLocaleString()}원/L</div>
+                    <div style="font-weight:600;">${Number(d.totalDist).toLocaleString()} km</div>
+                    <div style="font-size:11px; color:#94a3b8;">@ ${Number(d.unitPrice).toLocaleString()}원/L</div>
                 </div>
             </div>`;
         });

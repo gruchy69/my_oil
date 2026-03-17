@@ -213,7 +213,7 @@
     });
 
     // ── 실시간 구독 ──────────────────────────────────────────
-    const q = query(collection(db, "oil_records"), orderBy("regDate", "asc"));
+    const q = query(collection(db, "oil_records"), orderBy("regDate", "desc"));
     onSnapshot(q, snapshot => {
         const records = snapshot.docs.map(d => ({ _id: d.id, ...d.data() }));
         renderList(records);
@@ -236,11 +236,13 @@
             return;
         }
         let html = '';
-        for (let i = records.length - 1; i >= 0; i--) {
+        // desc 정렬로 오므로 그대로 순회 (최신이 위)
+        for (let i = 0; i < records.length; i++) {
             const rec = records[i];
             let economy = "-", moneyEco = "-", intervalDist = "- km";
-            if (i > 0) {
-                const diff = rec.totalDist - records[i - 1].totalDist;
+            // 이전 기록 = 더 오래된 것 = records[i+1]
+            if (i < records.length - 1) {
+                const diff = rec.totalDist - records[i + 1].totalDist;
                 if (diff > 0 && rec.capacity > 0) {
                     economy      = (diff / rec.capacity).toFixed(2);
                     moneyEco     = rec.unitPrice > 0 ? ((+economy / rec.unitPrice) * 1000).toFixed(2) : "-";
@@ -273,7 +275,7 @@
             });
         });
 
-        // 삭제 버튼 — innerHTML 교체 후 재등록
+        // 삭제 버튼
         container.querySelectorAll('.btn-delete').forEach(btn => {
             btn.addEventListener('click', async () => {
                 if (!confirm("기록을 삭제하시겠습니까?")) return;
@@ -286,12 +288,14 @@
     // ── 대시보드 렌더 ────────────────────────────────────────
     function renderDashboard(records) {
         let sumSpend = 0, sumOil = 0;
-        for (let i = 1; i < records.length; i++) {
+        // desc 정렬: records[0]이 최신, records[last]가 가장 오래됨
+        // 연비 계산 대상: 두 번째 이상 기록 (= records[0] ~ records[length-2])
+        for (let i = 0; i < records.length - 1; i++) {
             sumSpend += records[i].amount   || 0;
             sumOil   += records[i].capacity || 0;
         }
         const totalKm = records.length > 1
-            ? records[records.length - 1].totalDist - records[0].totalDist : 0;
+            ? records[0].totalDist - records[records.length - 1].totalDist : 0;
 
         $('totalSpend').innerText    = sumSpend.toLocaleString() + "원";
         $('totalDistance').innerText = totalKm.toLocaleString() + "km";

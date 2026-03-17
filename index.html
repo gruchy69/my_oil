@@ -2,250 +2,132 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>데이터 190건 개별 강제 전송</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 차 주유 매니저</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 15px; color: #334155; }
+        .container { max-width: 500px; margin: auto; }
+        .card { background: white; padding: 18px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; }
+        .input-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box; outline: none; }
+        input:focus { border-color: var(--primary); }
+        button { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 16px; transition: 0.2s; }
+        button:active { transform: scale(0.98); opacity: 0.9; }
+        .record-header { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 10px; }
+        .record-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding: 14px 0; }
+        .record-item:last-child { border: none; }
+        .date { font-size: 12px; color: #64748b; margin-bottom: 2px; }
+        .price { font-weight: bold; color: #1e293b; font-size: 15px; }
+        .dist { text-align: right; font-size: 14px; color: #334155; }
+        #count { font-size: 13px; color: var(--primary); font-weight: bold; background: #dbeafe; padding: 4px 10px; border-radius: 20px; }
+    </style>
 </head>
-<body style="text-align:center; padding:50px; font-family:sans-serif;">
-    <h2>🚀 데이터 190건 한 땀 한 땀 전송</h2>
-    <p>기존 데이터를 삭제하고 190개를 하나씩 순차적으로 올립니다.</p>
-    <button id="btn" onclick="uploadOneByOne()" style="padding:20px; font-size:18px; background:#e11d48; color:white; border:none; border-radius:10px; cursor:pointer;">삭제 후 개별 전송 시작</button>
-    
-    <div id="status" style="margin-top:20px; font-size:22px; font-weight:bold; color:#2563eb;">대기 중...</div>
-    <div id="log" style="margin-top:20px; text-align:left; max-width:450px; margin-left:auto; margin-right:auto; height:250px; overflow-y:auto; border:1px solid #ccc; padding:15px; font-size:12px; background:#f8fafc;"></div>
+<body>
 
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyD2ga67oPk59VPwflArXCvS_5HRgM6f4Ww",
-            authDomain: "my-fuel-288ad.firebaseapp.com",
-            projectId: "my-fuel-288ad",
-            storageBucket: "my-fuel-288ad.firebasestorage.app",
-            messagingSenderId: "184882492152",
-            appId: "1:184882492152:web:2906999a4bcdc098dac10d"
+<div class="container">
+    <div class="card">
+        <h3 style="margin-top:0; color:#1e293b; font-size: 18px;">⛽ 새 주유 기록</h3>
+        <div class="input-group">
+            <input type="date" id="uiDate">
+            <input type="number" id="uiDist" placeholder="누적 주행거리(km)">
+        </div>
+        <div class="input-group">
+            <input type="number" id="uiAmount" placeholder="주유 금액(원)">
+            <input type="number" id="uiUnitPrice" placeholder="단가(원)">
+        </div>
+        <button onclick="saveData()">기록 저장하기</button>
+    </div>
+
+    <div class="record-header">
+        <h3 style="margin:0; color:#1e293b; font-size: 18px;">📊 주유 히스토리</h3>
+        <span id="count">연결 중...</span>
+    </div>
+    <div id="list" class="card" style="min-height: 200px;">
+        <div id="loading" style="text-align:center; padding:40px; color:#94a3b8;">데이터를 불러오는 중...</div>
+    </div>
+</div>
+
+<script>
+    // Firebase 초기화
+    const firebaseConfig = {
+        apiKey: "AIzaSyD2ga67oPk59VPwflArXCvS_5HRgM6f4Ww",
+        authDomain: "my-fuel-288ad.firebaseapp.com",
+        projectId: "my-fuel-288ad",
+        storageBucket: "my-fuel-288ad.firebasestorage.app",
+        messagingSenderId: "184882492152",
+        appId: "1:184882492152:web:2906999a4bcdc098dac10d"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // 기본 날짜 설정
+    document.getElementById('uiDate').value = new Date().toISOString().substring(0, 10);
+
+    // 데이터 저장
+    async function saveData() {
+        const amount = Number(document.getElementById('uiAmount').value);
+        const literAmount = Number(document.getElementById('uiUnitPrice').value);
+        const totalDistance = Number(document.getElementById('uiDist').value);
+        const dateStr = document.getElementById('uiDate').value;
+
+        if(!amount || !literAmount || !totalDistance) return alert("모든 항목을 입력해 주세요.");
+
+        const docData = {
+            amount: amount,
+            literAmount: literAmount,
+            totalDistance: totalDistance,
+            oilCapacity: Number((amount / literAmount).toFixed(2)),
+            refuelDate: new Date(dateStr).getTime() // 타임스탬프로 저장하여 정렬 가능케 함
         };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
 
-        // 190개 전체 데이터 리스트
-        const allData = [
-            {"amount":50457,"date":"2023-07-03","unitPrice":1529,"capacity":33.0,"totalDist":106000},
-            {"amount":45870,"date":"2023-07-07","unitPrice":1529,"capacity":30.0,"totalDist":106257},
-            {"amount":29880,"date":"2023-07-11","unitPrice":1494,"capacity":20.0,"totalDist":106477},
-            {"amount":45870,"date":"2023-07-12","unitPrice":1529,"capacity":30.0,"totalDist":106802},
-            {"amount":45870,"date":"2023-07-18","unitPrice":1529,"capacity":30.0,"totalDist":107079},
-            {"amount":45870,"date":"2023-07-25","unitPrice":1529,"capacity":30.0,"totalDist":107369},
-            {"amount":47040,"date":"2023-07-31","unitPrice":1568,"capacity":30.0,"totalDist":107612},
-            {"amount":46470,"date":"2023-08-01","unitPrice":1549,"capacity":30.0,"totalDist":107937},
-            {"amount":48570,"date":"2023-08-07","unitPrice":1619,"capacity":30.0,"totalDist":108282},
-            {"amount":42125,"date":"2023-08-08","unitPrice":1685,"capacity":25.0,"totalDist":108438},
-            {"amount":48570,"date":"2023-08-11","unitPrice":1619,"capacity":30.0,"totalDist":108709},
-            {"amount":49470,"date":"2023-08-16","unitPrice":1649,"capacity":30.0,"totalDist":108984},
-            {"amount":49770,"date":"2023-08-21","unitPrice":1659,"capacity":30.0,"totalDist":109278},
-            {"amount":49770,"date":"2023-08-25","unitPrice":1659,"capacity":30.0,"totalDist":109594},
-            {"amount":50370,"date":"2023-08-29","unitPrice":1679,"capacity":30.0,"totalDist":109868},
-            {"amount":50370,"date":"2023-09-02","unitPrice":1679,"capacity":30.0,"totalDist":110183},
-            {"amount":50370,"date":"2023-09-08","unitPrice":1679,"capacity":30.0,"totalDist":110464},
-            {"amount":50670,"date":"2023-09-12","unitPrice":1689,"capacity":30.0,"totalDist":110756},
-            {"amount":51570,"date":"2023-09-18","unitPrice":1719,"capacity":30.0,"totalDist":111029},
-            {"amount":52170,"date":"2023-09-22","unitPrice":1739,"capacity":30.0,"totalDist":111326},
-            {"amount":52170,"date":"2023-09-27","unitPrice":1739,"capacity":30.0,"totalDist":111627},
-            {"amount":50370,"date":"2023-10-02","unitPrice":1679,"capacity":30.0,"totalDist":111899},
-            {"amount":52170,"date":"2023-10-06","unitPrice":1739,"capacity":30.0,"totalDist":112216},
-            {"amount":52470,"date":"2023-10-12","unitPrice":1749,"capacity":30.0,"totalDist":112521},
-            {"amount":52470,"date":"2023-10-18","unitPrice":1749,"capacity":30.0,"totalDist":112833},
-            {"amount":51570,"date":"2023-10-24","unitPrice":1719,"capacity":30.0,"totalDist":113146},
-            {"amount":50370,"date":"2023-10-27","unitPrice":1679,"capacity":30.0,"totalDist":113437},
-            {"amount":48870,"date":"2023-11-01","unitPrice":1629,"capacity":30.0,"totalDist":113708},
-            {"amount":48870,"date":"2023-11-07","unitPrice":1629,"capacity":30.0,"totalDist":114032},
-            {"amount":47970,"date":"2023-11-13","unitPrice":1599,"capacity":30.0,"totalDist":114316},
-            {"amount":47970,"date":"2023-11-17","unitPrice":1599,"capacity":30.0,"totalDist":114620},
-            {"amount":47370,"date":"2023-11-23","unitPrice":1579,"capacity":30.0,"totalDist":114945},
-            {"amount":47370,"date":"2023-11-28","unitPrice":1579,"capacity":30.0,"totalDist":115260},
-            {"amount":46170,"date":"2023-12-04","unitPrice":1539,"capacity":30.0,"totalDist":115546},
-            {"amount":46170,"date":"2023-12-11","unitPrice":1539,"capacity":30.0,"totalDist":115858},
-            {"amount":44970,"date":"2023-12-18","unitPrice":1499,"capacity":30.0,"totalDist":116173},
-            {"amount":44970,"date":"2023-12-23","unitPrice":1499,"capacity":30.0,"totalDist":116467},
-            {"amount":44970,"date":"2023-12-28","unitPrice":1499,"capacity":30.0,"totalDist":116773},
-            {"amount":45570,"date":"2024-01-03","unitPrice":1519,"capacity":30.0,"totalDist":117079},
-            {"amount":45570,"date":"2024-01-09","unitPrice":1519,"capacity":30.0,"totalDist":117371},
-            {"amount":45570,"date":"2024-01-15","unitPrice":1519,"capacity":30.0,"totalDist":117652},
-            {"amount":45570,"date":"2024-01-20","unitPrice":1519,"capacity":30.0,"totalDist":117961},
-            {"amount":45570,"date":"2024-01-25","unitPrice":1519,"capacity":30.0,"totalDist":118241},
-            {"amount":45870,"date":"2024-01-30","unitPrice":1529,"capacity":30.0,"totalDist":118557},
-            {"amount":46770,"date":"2024-02-05","unitPrice":1559,"capacity":30.0,"totalDist":118855},
-            {"amount":47670,"date":"2024-02-09","unitPrice":1589,"capacity":30.0,"totalDist":119159},
-            {"amount":48270,"date":"2024-02-14","unitPrice":1609,"capacity":30.0,"totalDist":119438},
-            {"amount":48870,"date":"2024-02-19","unitPrice":1629,"capacity":30.0,"totalDist":119749},
-            {"amount":48870,"date":"2024-02-23","unitPrice":1629,"capacity":30.0,"totalDist":120030},
-            {"amount":48870,"date":"2024-02-28","unitPrice":1629,"capacity":30.0,"totalDist":120340},
-            {"amount":48870,"date":"2024-03-05","unitPrice":1629,"capacity":30.0,"totalDist":120653},
-            {"amount":48870,"date":"2024-03-11","unitPrice":1629,"capacity":30.0,"totalDist":120935},
-            {"amount":48870,"date":"2024-03-15","unitPrice":1629,"capacity":30.0,"totalDist":121245},
-            {"amount":48870,"date":"2024-03-21","unitPrice":1629,"capacity":30.0,"totalDist":121545},
-            {"amount":48870,"date":"2024-03-27","unitPrice":1629,"capacity":30.0,"totalDist":121855},
-            {"amount":49770,"date":"2024-04-01","unitPrice":1659,"capacity":30.0,"totalDist":122143},
-            {"amount":50370,"date":"2024-04-06","unitPrice":1679,"capacity":30.0,"totalDist":122452},
-            {"amount":51270,"date":"2024-04-12","unitPrice":1709,"capacity":30.0,"totalDist":122756},
-            {"amount":51270,"date":"2024-04-17","unitPrice":1709,"capacity":30.0,"totalDist":123067},
-            {"amount":51270,"date":"2024-04-23","unitPrice":1709,"capacity":30.0,"totalDist":123386},
-            {"amount":51270,"date":"2024-04-29","unitPrice":1709,"capacity":30.0,"totalDist":123674},
-            {"amount":50370,"date":"2024-05-04","unitPrice":1679,"capacity":30.0,"totalDist":123984},
-            {"amount":49770,"date":"2024-05-10","unitPrice":1659,"capacity":30.0,"totalDist":124286},
-            {"amount":48870,"date":"2024-05-16","unitPrice":1629,"capacity":30.0,"totalDist":124598},
-            {"amount":48870,"date":"2024-05-21","unitPrice":1629,"capacity":30.0,"totalDist":124874},
-            {"amount":47970,"date":"2024-05-27","unitPrice":1599,"capacity":30.0,"totalDist":125193},
-            {"amount":47670,"date":"2024-06-01","unitPrice":1589,"capacity":30.0,"totalDist":125470},
-            {"amount":46770,"date":"2024-06-07","unitPrice":1559,"capacity":30.0,"totalDist":125791},
-            {"amount":46770,"date":"2024-06-13","unitPrice":1559,"capacity":30.0,"totalDist":126102},
-            {"amount":47670,"date":"2024-06-19","unitPrice":1589,"capacity":30.0,"totalDist":126402},
-            {"amount":48270,"date":"2024-06-25","unitPrice":1609,"capacity":30.0,"totalDist":126719},
-            {"amount":49470,"date":"2024-07-01","unitPrice":1649,"capacity":30.0,"totalDist":127038},
-            {"amount":50670,"date":"2024-07-06","unitPrice":1689,"capacity":30.0,"totalDist":127352},
-            {"amount":50670,"date":"2024-07-12","unitPrice":1689,"capacity":30.0,"totalDist":127678},
-            {"amount":50670,"date":"2024-07-18","unitPrice":1689,"capacity":30.0,"totalDist":127976},
-            {"amount":50970,"date":"2024-07-24","unitPrice":1699,"capacity":30.0,"totalDist":128292},
-            {"amount":50670,"date":"2024-07-30","unitPrice":1689,"capacity":30.0,"totalDist":128594},
-            {"amount":50370,"date":"2024-08-05","unitPrice":1679,"capacity":30.0,"totalDist":128913},
-            {"amount":49770,"date":"2024-08-11","unitPrice":1659,"capacity":30.0,"totalDist":129215},
-            {"amount":48870,"date":"2024-08-17","unitPrice":1629,"capacity":30.0,"totalDist":129528},
-            {"amount":48570,"date":"2024-08-23","unitPrice":1619,"capacity":30.0,"totalDist":129813},
-            {"amount":47970,"date":"2024-08-29","unitPrice":1599,"capacity":30.0,"totalDist":130129},
-            {"amount":47370,"date":"2024-09-04","unitPrice":1579,"capacity":30.0,"totalDist":130419},
-            {"amount":47370,"date":"2024-09-10","unitPrice":1579,"capacity":30.0,"totalDist":130722},
-            {"amount":47370,"date":"2024-09-14","unitPrice":1579,"capacity":30.0,"totalDist":131015},
-            {"amount":47370,"date":"2024-09-20","unitPrice":1579,"capacity":30.0,"totalDist":131343},
-            {"amount":46770,"date":"2024-09-26","unitPrice":1559,"capacity":30.0,"totalDist":131654},
-            {"amount":46770,"date":"2024-10-02","unitPrice":1559,"capacity":30.0,"totalDist":131938},
-            {"amount":46770,"date":"2024-10-08","unitPrice":1559,"capacity":30.0,"totalDist":132236},
-            {"amount":47370,"date":"2024-10-14","unitPrice":1579,"capacity":30.0,"totalDist":132549},
-            {"amount":48270,"date":"2024-10-20","unitPrice":1609,"capacity":30.0,"totalDist":132863},
-            {"amount":48270,"date":"2024-10-25","unitPrice":1609,"capacity":30.0,"totalDist":133146},
-            {"amount":48270,"date":"2024-10-31","unitPrice":1609,"capacity":30.0,"totalDist":133464},
-            {"amount":48270,"date":"2024-11-06","unitPrice":1609,"capacity":30.0,"totalDist":133746},
-            {"amount":48270,"date":"2024-11-12","unitPrice":1609,"capacity":30.0,"totalDist":134047},
-            {"amount":48270,"date":"2024-11-18","unitPrice":1609,"capacity":30.0,"totalDist":134354},
-            {"amount":48270,"date":"2024-11-24","unitPrice":1609,"capacity":30.0,"totalDist":134661},
-            {"amount":48570,"date":"2024-11-30","unitPrice":1619,"capacity":30.0,"totalDist":134954},
-            {"amount":48570,"date":"2024-12-06","unitPrice":1619,"capacity":30.0,"totalDist":135266},
-            {"amount":48570,"date":"2024-12-12","unitPrice":1619,"capacity":30.0,"totalDist":135579},
-            {"amount":48570,"date":"2024-12-18","unitPrice":1619,"capacity":30.0,"totalDist":135894},
-            {"amount":48570,"date":"2024-12-24","unitPrice":1619,"capacity":30.0,"totalDist":136211},
-            {"amount":48570,"date":"2024-12-30","unitPrice":1619,"capacity":30.0,"totalDist":136511},
-            {"amount":48270,"date":"2025-01-05","unitPrice":1609,"capacity":30.0,"totalDist":136829},
-            {"amount":47970,"date":"2025-01-11","unitPrice":1599,"capacity":30.0,"totalDist":137135},
-            {"amount":47670,"date":"2025-01-17","unitPrice":1589,"capacity":30.0,"totalDist":137452},
-            {"amount":47670,"date":"2025-01-23","unitPrice":1589,"capacity":30.0,"totalDist":137748},
-            {"amount":47670,"date":"2025-01-29","unitPrice":1589,"capacity":30.0,"totalDist":138063},
-            {"amount":47970,"date":"2025-02-04","unitPrice":1599,"capacity":30.0,"totalDist":138356},
-            {"amount":48570,"date":"2025-02-10","unitPrice":1619,"capacity":30.0,"totalDist":138652},
-            {"amount":48570,"date":"2025-02-16","unitPrice":1619,"capacity":30.0,"totalDist":138961},
-            {"amount":48870,"date":"2025-02-22","unitPrice":1629,"capacity":30.0,"totalDist":139276},
-            {"amount":49770,"date":"2025-02-28","unitPrice":1659,"capacity":30.0,"totalDist":139581},
-            {"amount":50070,"date":"2025-03-05","unitPrice":1669,"capacity":30.0,"totalDist":139886},
-            {"amount":50070,"date":"2025-03-10","unitPrice":1669,"capacity":30.0,"totalDist":140110},
-            {"amount":50070,"date":"2025-03-16","unitPrice":1669,"capacity":30.0,"totalDist":140402},
-            {"amount":50370,"date":"2025-03-22","unitPrice":1679,"capacity":30.0,"totalDist":140722},
-            {"amount":50370,"date":"2025-03-28","unitPrice":1679,"capacity":30.0,"totalDist":141029},
-            {"amount":50970,"date":"2025-04-03","unitPrice":1699,"capacity":30.0,"totalDist":141344},
-            {"amount":50970,"date":"2025-04-09","unitPrice":1699,"capacity":30.0,"totalDist":141656},
-            {"amount":51270,"date":"2025-04-15","unitPrice":1709,"capacity":30.0,"totalDist":141971},
-            {"amount":51270,"date":"2025-04-21","unitPrice":1709,"capacity":30.0,"totalDist":142283},
-            {"amount":51270,"date":"2025-04-27","unitPrice":1709,"capacity":30.0,"totalDist":142594},
-            {"amount":50670,"date":"2025-05-03","unitPrice":1689,"capacity":30.0,"totalDist":142911},
-            {"amount":49770,"date":"2025-05-09","unitPrice":1659,"capacity":30.0,"totalDist":143224},
-            {"amount":48870,"date":"2025-05-15","unitPrice":1629,"capacity":30.0,"totalDist":143542},
-            {"amount":48270,"date":"2025-05-21","unitPrice":1609,"capacity":30.0,"totalDist":143851},
-            {"amount":47970,"date":"2025-05-27","unitPrice":1599,"capacity":30.0,"totalDist":144170},
-            {"amount":47670,"date":"2025-06-02","unitPrice":1589,"capacity":30.0,"totalDist":144481},
-            {"amount":47370,"date":"2025-06-08","unitPrice":1579,"capacity":30.0,"totalDist":144793},
-            {"amount":47370,"date":"2025-06-14","unitPrice":1579,"capacity":30.0,"totalDist":145102},
-            {"amount":47970,"date":"2025-06-20","unitPrice":1599,"capacity":30.0,"totalDist":145415},
-            {"amount":48570,"date":"2025-06-26","unitPrice":1619,"capacity":30.0,"totalDist":145722},
-            {"amount":49470,"date":"2025-07-02","unitPrice":1649,"capacity":30.0,"totalDist":146034},
-            {"amount":50370,"date":"2025-07-08","unitPrice":1679,"capacity":30.0,"totalDist":146342},
-            {"amount":50670,"date":"2025-07-14","unitPrice":1689,"capacity":30.0,"totalDist":146651},
-            {"amount":50670,"date":"2025-07-20","unitPrice":1689,"capacity":30.0,"totalDist":146960},
-            {"amount":50670,"date":"2025-07-26","unitPrice":1689,"capacity":30.0,"totalDist":147271},
-            {"amount":50670,"date":"2025-08-01","unitPrice":1689,"capacity":30.0,"totalDist":147582},
-            {"amount":50370,"date":"2025-08-07","unitPrice":1679,"capacity":30.0,"totalDist":147894},
-            {"amount":49770,"date":"2025-08-13","unitPrice":1659,"capacity":30.0,"totalDist":148201},
-            {"amount":49170,"date":"2025-08-19","unitPrice":1639,"capacity":30.0,"totalDist":148512},
-            {"amount":48570,"date":"2025-08-25","unitPrice":1619,"capacity":30.0,"totalDist":148821},
-            {"amount":47970,"date":"2025-08-31","unitPrice":1599,"capacity":30.0,"totalDist":149132},
-            {"amount":47370,"date":"2025-09-06","unitPrice":1579,"capacity":30.0,"totalDist":149443},
-            {"amount":46770,"date":"2025-09-12","unitPrice":1559,"capacity":30.0,"totalDist":149752},
-            {"amount":46170,"date":"2025-09-18","unitPrice":1539,"capacity":30.0,"totalDist":150061},
-            {"amount":45870,"date":"2025-09-24","unitPrice":1529,"capacity":30.0,"totalDist":150372},
-            {"amount":45570,"date":"2025-09-30","unitPrice":1519,"capacity":30.0,"totalDist":150681},
-            {"amount":45870,"date":"2025-10-06","unitPrice":1529,"capacity":30.0,"totalDist":150992},
-            {"amount":46470,"date":"2025-10-12","unitPrice":1549,"capacity":30.0,"totalDist":151301},
-            {"amount":47040,"date":"2025-10-18","unitPrice":1568,"capacity":30.0,"totalDist":151612},
-            {"amount":47670,"date":"2025-10-24","unitPrice":1589,"capacity":30.0,"totalDist":151921},
-            {"amount":48270,"date":"2025-10-30","unitPrice":1609,"capacity":30.0,"totalDist":152232},
-            {"amount":48570,"date":"2025-11-05","unitPrice":1619,"capacity":30.0,"totalDist":152541},
-            {"amount":48870,"date":"2025-11-11","unitPrice":1629,"capacity":30.0,"totalDist":152852},
-            {"amount":48870,"date":"2025-11-17","unitPrice":1629,"capacity":30.0,"totalDist":153161},
-            {"amount":48870,"date":"2025-11-23","unitPrice":1629,"capacity":30.0,"totalDist":153472},
-            {"amount":48570,"date":"2025-11-29","unitPrice":1619,"capacity":30.0,"totalDist":153781},
-            {"amount":48270,"date":"2025-12-05","unitPrice":1609,"capacity":30.0,"totalDist":154092},
-            {"amount":47970,"date":"2025-12-11","unitPrice":1599,"capacity":30.0,"totalDist":154401},
-            {"amount":47670,"date":"2025-12-17","unitPrice":1589,"capacity":30.0,"totalDist":154712},
-            {"amount":47370,"date":"2025-12-23","unitPrice":1579,"capacity":30.0,"totalDist":155021},
-            {"amount":47040,"date":"2025-12-29","unitPrice":1568,"capacity":30.0,"totalDist":155332},
-            {"amount":46770,"date":"2026-01-04","unitPrice":1559,"capacity":30.0,"totalDist":155641},
-            {"amount":46470,"date":"2026-01-10","unitPrice":1549,"capacity":30.0,"totalDist":155952},
-            {"amount":46170,"date":"2026-01-16","unitPrice":1539,"capacity":30.0,"totalDist":156261},
-            {"amount":45870,"date":"2026-01-22","unitPrice":1529,"capacity":30.0,"totalDist":156572},
-            {"amount":45570,"date":"2026-01-28","unitPrice":1519,"capacity":30.0,"totalDist":156881},
-            {"amount":45870,"date":"2026-02-03","unitPrice":1529,"capacity":30.0,"totalDist":157192},
-            {"amount":46470,"date":"2026-02-09","unitPrice":1549,"capacity":30.0,"totalDist":157501},
-            {"amount":47040,"date":"2026-02-15","unitPrice":1568,"capacity":30.0,"totalDist":157812},
-            {"amount":47670,"date":"2026-02-21","unitPrice":1589,"capacity":30.0,"totalDist":158121},
-            {"amount":48270,"date":"2026-02-27","unitPrice":1609,"capacity":30.0,"totalDist":158432},
-            {"amount":48750,"date":"2026-03-03","unitPrice":1625,"capacity":30.0,"totalDist":154917},
-            {"amount":24420,"date":"2026-03-11","unitPrice":1628,"capacity":15.0,"totalDist":155239},
-            {"amount":49650,"date":"2026-03-15","unitPrice":1655,"capacity":30.0,"totalDist":155328},
-            {"amount":52350,"date":"2026-03-15","unitPrice":1745,"capacity":30.0,"totalDist":155630}
-        ];
+        try {
+            await db.collection("oil_records").add(docData);
+            alert("기록되었습니다!");
+            document.getElementById('uiAmount').value = '';
+            document.getElementById('uiUnitPrice').value = '';
+            document.getElementById('uiDist').value = '';
+        } catch(e) { alert("저장 실패: " + e.message); }
+    }
 
-        async function uploadOneByOne() {
-            if(!confirm("서버 데이터를 삭제하고 190건을 하나씩 다시 올릴까요?")) return;
-            const btn = document.getElementById('btn');
-            const status = document.getElementById('status');
-            const log = document.getElementById('log');
-            btn.disabled = true;
+    // 데이터 실시간 조회 (정렬: 최신 날짜순)
+    db.collection("oil_records").orderBy("refuelDate", "desc").onSnapshot((snapshot) => {
+        const listDiv = document.getElementById('list');
+        document.getElementById('count').innerText = `총 ${snapshot.size}건`;
+        
+        let html = '';
+        if (snapshot.empty) {
+            html = '<div style="text-align:center; padding:40px; color:#94a3b8;">기록이 없습니다.</div>';
+        } else {
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                // 타임스탬프를 가독성 좋은 날짜로 변환
+                const date = new Date(d.refuelDate).toLocaleDateString('ko-KR', {
+                    year: 'numeric', month: '2-digit', day: '2-digit'
+                }).replace(/\. /g, '-').replace('.', '');
 
-            try {
-                // 1. 기존 데이터 삭제
-                status.innerText = "서버 데이터 삭제 중...";
-                const snap = await db.collection("oil_records").get();
-                const batch = db.batch();
-                snap.docs.forEach(doc => batch.delete(doc.ref));
-                await batch.commit();
-                log.innerHTML += "✅ 삭제 완료<br>";
-
-                // 2. 하나씩 전송
-                for (let i = 0; i < allData.length; i++) {
-                    await db.collection("oil_records").add({
-                        ...allData[i],
-                        regDate: Date.now()
-                    });
-                    status.innerText = `전송 중... (${i + 1} / 190)`;
-                    log.innerHTML += `🚀 [${allData[i].date}] ${allData[i].amount}원 전송 완료<br>`;
-                    log.scrollTop = log.scrollHeight;
-                    
-                    // 안정성을 위해 아주 짧은 휴식 (0.05초)
-                    await new Promise(r => setTimeout(r, 50));
-                }
-
-                status.innerText = "🎉 190건 전송 최종 완료!";
-                alert("성공적으로 복구되었습니다. 이제 최종 앱 코드로 교체하세요!");
-
-            } catch (e) {
-                status.innerText = "❌ 오류 발생";
-                log.innerHTML += "에러: " + e.message;
-            }
+                html += `
+                <div class="record-item">
+                    <div>
+                        <div class="date">${date}</div>
+                        <div class="price">${Number(d.amount).toLocaleString()}원 (${d.oilCapacity}L)</div>
+                    </div>
+                    <div class="dist">
+                        <div style="font-weight:600;">${Number(d.totalDistance).toLocaleString()} km</div>
+                        <div style="font-size:11px; color:#94a3b8;">@ ${Number(d.literAmount).toLocaleString()}원</div>
+                    </div>
+                </div>`;
+            });
         }
-    </script>
+        listDiv.innerHTML = html;
+    }, (err) => {
+        console.error(err);
+        if(err.message.includes("index")) {
+            document.getElementById('list').innerHTML = `<div style="padding:20px; font-size:12px; color:red;">정렬 인덱스 설정이 필요합니다. 관리자 콘솔 확인이 필요합니다.</div>`;
+        }
+    });
+</script>
 </body>
 </html>

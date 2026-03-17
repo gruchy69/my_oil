@@ -3,38 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>내 차 주유 매니저</title>
+    <title>내 차 주유 관리자</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <style>
         :root { --primary: #2563eb; --bg: #f8fafc; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: auto; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        h2 { margin: 0; color: #1e293b; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 15px; }
+        .container { max-width: 500px; margin: auto; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; }
-        .record-item { display: flex; justify-content: space-between; align-items: center; }
-        .date { font-size: 0.85rem; color: #64748b; }
-        .info { font-weight: bold; color: #1e293b; }
-        .stats { font-size: 0.9rem; color: var(--primary); margin-top: 5px; }
-        .badge { background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
-        #loading { text-align: center; padding: 50px; color: #64748b; }
+        .input-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        input { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        button { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%; }
+        .record-header { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 10px; }
+        .record-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 10px 0; }
+        .record-item:last-child { border: none; }
+        .date { font-size: 12px; color: #64748b; }
+        .price { font-weight: bold; color: #1e293b; }
+        .dist { text-align: right; font-size: 14px; color: #334155; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <header>
-        <h2>⛽ 주유 기록 내역</h2>
-        <div id="total-count" class="badge">불러오는 중...</div>
-    </header>
+    <div class="card">
+        <h3 style="margin-top:0">⛽ 새 주유 기록</h3>
+        <div class="input-group">
+            <input type="date" id="date">
+            <input type="number" id="totalDist" placeholder="현재 주행거리(km)">
+        </div>
+        <div class="input-group">
+            <input type="number" id="amount" placeholder="주유 금액(원)">
+            <input type="number" id="unitPrice" placeholder="단가(원)">
+        </div>
+        <button onclick="addRecord()">기록하기</button>
+    </div>
 
-    <div id="loading">데이터를 불러오는 중입니다...</div>
-    <div id="record-list"></div>
+    <div class="record-header">
+        <h3 style="margin:0">📊 주유 히스토리</h3>
+        <span id="count" style="font-size:12px; color:var(--primary); font-weight:bold;">불러오는 중...</span>
+    </div>
+    <div id="list" class="card"></div>
 </div>
 
 <script>
-    // Firebase 설정 (기존 설정 유지)
     const firebaseConfig = {
         apiKey: "AIzaSyD2ga67oPk59VPwflArXCvS_5HRgM6f4Ww",
         authDomain: "my-fuel-288ad.firebaseapp.com",
@@ -46,46 +57,49 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // 데이터 불러오기 및 화면 표시
-    function loadRecords() {
-        db.collection("oil_records")
-          .orderBy("date", "desc") // 최신순 정렬
-          .onSnapshot((snapshot) => {
-            const listDiv = document.getElementById('record-list');
-            const loadingDiv = document.getElementById('loading');
-            const countBadge = document.getElementById('total-count');
-            
-            loadingDiv.style.display = 'none';
-            listDiv.innerHTML = '';
-            countBadge.innerText = `총 ${snapshot.size}건`;
+    // 오늘 날짜 기본 설정
+    document.getElementById('date').value = new Date().toISOString().substring(0, 10);
 
-            snapshot.forEach((doc) => {
-                const item = doc.data();
-                const card = document.createElement('div');
-                card.className = 'card';
-                
-                // 연비 계산 (주행거리 / 주유량) - 데이터에 따라 조정 가능
-                const efficiency = (item.amount / item.unitPrice / (item.totalDist / 10000)).toFixed(1); 
-
-                card.innerHTML = `
-                    <div class="record-item">
-                        <div>
-                            <div class="date">${item.date}</div>
-                            <div class="info">${item.amount.toLocaleString()}원 (${item.capacity}L)</div>
-                        </div>
-                        <div style="text-align: right">
-                            <div class="info">${item.totalDist.toLocaleString()} km</div>
-                            <div class="stats">@ ${item.unitPrice}원</div>
-                        </div>
-                    </div>
-                `;
-                listDiv.appendChild(card);
-            });
-        });
+    // 데이터 추가 함수
+    async function addRecord() {
+        const doc = {
+            date: document.getElementById('date').value,
+            totalDist: Number(document.getElementById('totalDist').value),
+            amount: Number(document.getElementById('amount').value),
+            unitPrice: Number(document.getElementById('unitPrice').value),
+            capacity: Number((document.getElementById('amount').value / document.getElementById('unitPrice').value).toFixed(2))
+        };
+        
+        if(!doc.totalDist || !doc.amount) return alert("내용을 입력해주세요!");
+        
+        try {
+            await db.collection("oil_records").add(doc);
+            alert("저장되었습니다!");
+            document.getElementById('totalDist').value = '';
+            document.getElementById('amount').value = '';
+        } catch(e) { alert("오류 발생!"); }
     }
 
-    // 앱 실행
-    loadRecords();
+    // 데이터 실시간 불러오기
+    db.collection("oil_records").orderBy("date", "desc").onSnapshot(ss => {
+        const list = document.getElementById('list');
+        document.getElementById('count').innerText = `총 ${ss.size}건`;
+        list.innerHTML = '';
+        ss.forEach(doc => {
+            const d = doc.data();
+            list.innerHTML += `
+                <div class="record-item">
+                    <div>
+                        <div class="date">${d.date}</div>
+                        <div class="price">${d.amount.toLocaleString()}원 (${d.capacity}L)</div>
+                    </div>
+                    <div class="dist">
+                        <div>${d.totalDist.toLocaleString()} km</div>
+                        <div style="font-size:11px; color:#94a3b8;">@ ${d.unitPrice}원</div>
+                    </div>
+                </div>`;
+        });
+    });
 </script>
 </body>
 </html>

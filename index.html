@@ -265,12 +265,13 @@
     async function renderHomeCarList() {
         const container = $('carList');
 
-        // 마이그레이션 필요 여부 확인 (carId 없는 레코드 존재 여부)
-        const orphanSnap = await getDocs(query(collection(db, "oil_records"), where("carId", "==", null)));
-        // Firestore는 필드 없는 문서를 where로 못 잡으므로 전체에서 확인
-        const allSnap = await getDocs(query(collection(db, "oil_records"), orderBy("date", "desc")));
-        const hasOrphan = allSnap.docs.some(d => !d.data().carId);
-        $('migrateBanner').style.display = (hasOrphan && carsCache.length > 0) ? 'block' : 'none';
+        // 마이그레이션 필요 여부 확인 (orderBy 없이 전체 조회)
+        let hasOrphan = false;
+        try {
+            const allSnap = await getDocs(collection(db, "oil_records"));
+            hasOrphan = allSnap.docs.some(d => !d.data().carId);
+        } catch(e) { console.error(e); }
+        $("migrateBanner").style.display = (hasOrphan && carsCache.length > 0) ? "block" : "none";
 
         if (!carsCache.length) {
             container.innerHTML = '<div class="status-msg">차량을 추가해 주세요 👆</div>';
@@ -425,9 +426,14 @@
     }
 
     async function showMigrateSection() {
-        const allSnap = await getDocs(query(collection(db, "oil_records"), orderBy("date", "desc")));
-        const hasOrphan = allSnap.docs.some(d => !d.data().carId);
-        $('migrateSection').style.display = hasOrphan ? 'block' : 'none';
+        try {
+            const allSnap = await getDocs(collection(db, "oil_records"));
+            const hasOrphan = allSnap.docs.some(d => !d.data().carId);
+            $("migrateSection").style.display = hasOrphan ? "block" : "none";
+        } catch(e) {
+            console.error("마이그레이션 확인 실패:", e);
+            $("migrateSection").style.display = "block";
+        }
     }
 
     // 마이그레이션: 기존 데이터에 현재 carId 부여

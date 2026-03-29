@@ -211,6 +211,11 @@
             <h4 id="chartFuelTitle">💧 월별 주유량 (L)</h4>
             <div class="chart-wrap"><canvas id="chartFuel"></canvas></div>
         </div>
+
+        <div class="chart-card">
+            <h4>💳 월별 주유금액 (원)</h4>
+            <div class="chart-wrap"><canvas id="chartAmount"></canvas></div>
+        </div>
     </div>
 
 </div>
@@ -500,6 +505,7 @@
     // ══════════════════════════════════════════════════════════
     let chartDist = null;
     let chartFuel = null;
+    let chartAmount = null;
     let statsRecords = [];
 
     $('btnShowStats').addEventListener('click', () => {
@@ -534,91 +540,105 @@
         drawCharts(records, years[0]);
     }
 
+    // 막대 위 값 표시 플러그인
+    const labelPlugin = {
+        id: 'topLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx, data } = chart;
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                meta.data.forEach((bar, idx) => {
+                    const val = dataset.data[idx];
+                    if (!val) return;
+                    const label = dataset._labelFmt ? dataset._labelFmt(val) : val.toLocaleString();
+                    ctx.save();
+                    ctx.font = 'bold 9px sans-serif';
+                    ctx.fillStyle = '#555';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(label, bar.x, bar.y - 4);
+                    ctx.restore();
+                });
+            });
+        }
+    };
+    Chart.register(labelPlugin);
+
+    function makeBarChart(canvasId, data, color, labelFmt) {
+        const months = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+        const dataset = {
+            data,
+            backgroundColor: color,
+            borderRadius: 5,
+            _labelFmt: labelFmt || null,
+        };
+        return new Chart($(canvasId), {
+            type: 'bar',
+            data: { labels: months, datasets: [dataset] },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => labelFmt ? labelFmt(v) : v } },
+                    x: { ticks: { font: { size: 11 } } }
+                },
+                layout: { padding: { top: 16 } }
+            }
+        });
+    }
+
     function drawCharts(records, year) {
         const isEV = currentCarType === 'ev';
-        const months = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
-        // 해당 연도 기록 필터
-        const yearRecs = records.filter(r => r.date && r.date.startsWith(year));
+        // 해당 연도 + 전체 asc 정렬
+        const allSorted   = [...records].sort((a, b) => a.date.localeCompare(b.date));
+        const yearRecs    = allSorted.filter(r => r.date && r.date.startsWith(year));
 
-        // 월별 주행거리 계산 (해당 월에 주유한 기록의 주행거리 합산)
-        // desc 정렬이므로 asc로 뒤집기
-        const sorted = [...yearRecs].sort((a, b) => a.date.localeCompare(b.date));
-        const allSorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
+        const distByMonth   = Array(12).fill(0);
+        const fuelByMonth   = Array(12).fill(0);
+        const amountByMonth = Array(12).fill(0);
 
-        const distByMonth = Array(12).fill(0);
-        const fuelByMonth = Array(12).fill(0);
-
-        sorted.forEach(rec => {
-            const month = parseInt(rec.date.substring(5, 7)) - 1;
-            fuelByMonth[month] += rec.capacity || 0;
+        yearRecs.forEach(rec => {
+            const m = parseInt(rec.date.substring(5, 7)) - 1;
+            fuelByMonth[m]   += rec.capacity || 0;
+            amountByMonth[m] += rec.amount   || 0;
         });
 
-        // 주행거리: 이번 달 마지막 기록 - 저번 달 마지막 기록
+        // 월별 주행거리: 이번달 마지막 누적 - 전달 마지막 누적
         for (let m = 0; m < 12; m++) {
-            const thisMonthStr = `${year}-${String(m+1).padStart(2,'0')}`;
+            const thisMonthStr  = `${year}-${String(m+1).padStart(2,'0')}`;
             const prevMonthRecs = allSorted.filter(r => r.date < thisMonthStr + '-01');
             const thisMonthRecs = allSorted.filter(r => r.date.startsWith(thisMonthStr));
-
             if (thisMonthRecs.length > 0 && prevMonthRecs.length > 0) {
-                const lastThisMonth = thisMonthRecs[thisMonthRecs.length - 1].totalDist;
-                const lastPrevMonth = prevMonthRecs[prevMonthRecs.length - 1].totalDist;
-                distByMonth[m] = Math.max(0, lastThisMonth - lastPrevMonth);
+                distByMonth[m] = Math.max(0,
+                    thisMonthRecs[thisMonthRecs.length-1].totalDist -
+                    prevMonthRecs[prevMonthRecs.length-1].totalDist);
             } else if (thisMonthRecs.length > 1) {
                 distByMonth[m] = thisMonthRecs[thisMonthRecs.length-1].totalDist - thisMonthRecs[0].totalDist;
             }
         }
 
-        // 주행거리 막대 차트
-        if (chartDist) chartDist.destroy();
-        chartDist = new Chart($('chartDist'), {
-            type: 'bar',
-            data: {
-                labels: months,
-                datasets: [{
-                    label: '주행거리 (km)',
-                    data: distByMonth.map(v => Math.round(v)),
-                    backgroundColor: 'rgba(26,115,232,0.7)',
-                    borderRadius: 5,
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, ticks: { font: { size: 11 } } },
-                    x: { ticks: { font: { size: 11 } } }
-                }
-            }
-        });
+        // 차트 그리기
+        if (chartDist)   chartDist.destroy();
+        if (chartFuel)   chartFuel.destroy();
+        if (chartAmount) chartAmount.destroy();
 
-        // 주유량 꺾은선 차트
-        if (chartFuel) chartFuel.destroy();
-        chartFuel = new Chart($('chartFuel'), {
-            type: 'line',
-            data: {
-                labels: months,
-                datasets: [{
-                    label: isEV ? '충전량 (kWh)' : '주유량 (L)',
-                    data: fuelByMonth.map(v => parseFloat(v.toFixed(2))),
-                    borderColor: isEV ? '#00897b' : '#e67e22',
-                    backgroundColor: isEV ? 'rgba(0,137,123,0.1)' : 'rgba(230,126,34,0.1)',
-                    borderWidth: 2,
-                    pointRadius: 4,
-                    pointBackgroundColor: isEV ? '#00897b' : '#e67e22',
-                    tension: 0.3,
-                    fill: true,
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, ticks: { font: { size: 11 } } },
-                    x: { ticks: { font: { size: 11 } } }
-                }
-            }
-        });
+        chartDist = makeBarChart('chartDist',
+            distByMonth.map(v => Math.round(v)),
+            'rgba(26,115,232,0.75)',
+            v => v ? v.toLocaleString() + 'km' : ''
+        );
+
+        chartFuel = makeBarChart('chartFuel',
+            fuelByMonth.map(v => parseFloat(v.toFixed(1))),
+            isEV ? 'rgba(0,137,123,0.75)' : 'rgba(230,126,34,0.75)',
+            v => v ? v.toFixed(1) + (isEV ? 'kWh' : 'L') : ''
+        );
+
+        chartAmount = makeBarChart('chartAmount',
+            amountByMonth.map(v => Math.round(v)),
+            'rgba(39,174,96,0.75)',
+            v => v ? (v/10000).toFixed(1) + '만' : ''
+        );
     }
 
     $('btnBack').addEventListener('click', () => {

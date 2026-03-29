@@ -208,13 +208,8 @@
         </div>
 
         <div class="chart-card">
-            <h4 id="chartFuelTitle">💧 월별 주유량 (L)</h4>
-            <div class="chart-wrap"><canvas id="chartFuel"></canvas></div>
-        </div>
-
-        <div class="chart-card">
-            <h4>💳 월별 주유금액 (원)</h4>
-            <div class="chart-wrap"><canvas id="chartAmount"></canvas></div>
+            <h4 id="chartFuelTitle">💧 월별 주유량 (L) &amp; 💳 주유금액 (원)</h4>
+            <div class="chart-wrap" style="height:220px;"><canvas id="chartFuel"></canvas></div>
         </div>
     </div>
 
@@ -618,27 +613,91 @@
         }
 
         // 차트 그리기
+        const months = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
         if (chartDist)   chartDist.destroy();
         if (chartFuel)   chartFuel.destroy();
-        if (chartAmount) chartAmount.destroy();
+        if (chartAmount) { chartAmount.destroy(); chartAmount = null; }
 
+        // 주행거리 막대
         chartDist = makeBarChart('chartDist',
             distByMonth.map(v => Math.round(v)),
             'rgba(26,115,232,0.75)',
-            v => v ? v.toLocaleString() + 'km' : ''
+            v => v ? v.toLocaleString() : ''
         );
 
-        chartFuel = makeBarChart('chartFuel',
-            fuelByMonth.map(v => parseFloat(v.toFixed(1))),
-            isEV ? 'rgba(0,137,123,0.75)' : 'rgba(230,126,34,0.75)',
-            v => v ? v.toFixed(1) + (isEV ? 'kWh' : 'L') : ''
-        );
+        // 주유금액(막대) + 주유량(꺾은선) 혼합 차트
+        if (chartFuel) chartFuel.destroy();
+        const fuelColor   = isEV ? 'rgba(0,137,123,0.9)'   : 'rgba(230,126,34,0.9)';
+        const amountColor = 'rgba(39,174,96,0.7)';
 
-        chartAmount = makeBarChart('chartAmount',
-            amountByMonth.map(v => Math.round(v)),
-            'rgba(39,174,96,0.75)',
-            v => v ? (v/10000).toFixed(1) + '만' : ''
-        );
+        chartFuel = new Chart($('chartFuel'), {
+            data: {
+                labels: months,
+                datasets: [
+                    {
+                        type: 'bar',
+                        label: '주유금액',
+                        data: amountByMonth.map(v => Math.round(v)),
+                        backgroundColor: amountColor,
+                        borderRadius: 5,
+                        yAxisID: 'yAmount',
+                        order: 2,
+                    },
+                    {
+                        type: 'line',
+                        label: isEV ? '충전량' : '주유량',
+                        data: fuelByMonth.map(v => parseFloat(v.toFixed(1))),
+                        borderColor: fuelColor,
+                        backgroundColor: 'transparent',
+                        borderWidth: 2.5,
+                        pointRadius: 4,
+                        pointBackgroundColor: fuelColor,
+                        tension: 0.3,
+                        yAxisID: 'yFuel',
+                        order: 1,
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: { font: { size: 11 }, boxWidth: 12 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const v = ctx.parsed.y;
+                                if (!v) return null;
+                                if (ctx.dataset.label === '주유금액')
+                                    return '금액: ' + v.toLocaleString() + '원';
+                                return (isEV ? '충전량: ' : '주유량: ') + v + (isEV ? 'kWh' : 'L');
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    yAmount: {
+                        type: 'linear', position: 'left',
+                        beginAtZero: true,
+                        ticks: { font: { size: 10 }, callback: v => v ? (v/10000).toFixed(0)+'만' : '0' },
+                        grid: { drawOnChartArea: true }
+                    },
+                    yFuel: {
+                        type: 'linear', position: 'right',
+                        beginAtZero: true,
+                        ticks: { font: { size: 10 }, callback: v => v ? v+(isEV?'k':'L') : '0' },
+                        grid: { drawOnChartArea: false }
+                    },
+                    x: { ticks: { font: { size: 11 } } }
+                },
+                layout: { padding: { top: 16 } }
+            }
+        });
     }
 
     $('btnBack').addEventListener('click', () => {

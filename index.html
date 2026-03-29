@@ -539,13 +539,23 @@
     const labelPlugin = {
         id: 'topLabels',
         afterDatasetsDraw(chart) {
-            const { ctx, data } = chart;
+            const { ctx } = chart;
             chart.data.datasets.forEach((dataset, i) => {
                 const meta = chart.getDatasetMeta(i);
                 meta.data.forEach((bar, idx) => {
                     const val = dataset.data[idx];
                     if (!val) return;
-                    const label = dataset._labelFmt ? dataset._labelFmt(val) : val.toLocaleString();
+                    let label;
+                    if (dataset._labelFmt) {
+                        label = dataset._labelFmt(val);
+                    } else if (dataset.label === '주유금액') {
+                        label = val.toFixed(1) + '만';
+                    } else if (dataset.label === '주유량' || dataset.label === '충전량') {
+                        label = val + (dataset.label === '충전량' ? 'k' : 'L');
+                    } else {
+                        label = val.toLocaleString();
+                    }
+                    if (!label) return;
                     ctx.save();
                     ctx.font = 'bold 9px sans-serif';
                     ctx.fillStyle = '#555';
@@ -638,7 +648,7 @@
                     {
                         type: 'bar',
                         label: '주유금액',
-                        data: amountByMonth.map(v => Math.round(v)),
+                        data: amountByMonth.map(v => parseFloat((v / 10000).toFixed(1))),
                         backgroundColor: amountColor,
                         borderRadius: 5,
                         yAxisID: 'yAmount',
@@ -674,7 +684,7 @@
                                 const v = ctx.parsed.y;
                                 if (!v) return null;
                                 if (ctx.dataset.label === '주유금액')
-                                    return '금액: ' + v.toLocaleString() + '원';
+                                    return '금액: ' + (v).toFixed(1) + '만원';
                                 return (isEV ? '충전량: ' : '주유량: ') + v + (isEV ? 'kWh' : 'L');
                             }
                         }
@@ -684,16 +694,16 @@
                     yAmount: {
                         type: 'linear', position: 'left',
                         beginAtZero: true,
-                        // 금액 max를 실제 최대의 2배로 → 막대가 차트 하단 절반에만 위치
-                        max: Math.max(...amountByMonth) * 2 || 100000,
-                        ticks: { font: { size: 10 }, callback: v => v ? (v/10000).toFixed(0)+'만' : '0' },
+                        // 금액을 만원 단위로 표시 + max를 3배로 → 막대가 하단 1/3에만 위치
+                        max: Math.ceil(Math.max(...amountByMonth) / 10000) * 3 || 100,
+                        ticks: { font: { size: 10 }, callback: v => v ? v+'만' : '0' },
                         grid: { drawOnChartArea: true }
                     },
                     yFuel: {
                         type: 'linear', position: 'right',
                         beginAtZero: true,
-                        // 연료 max를 실제 최대의 1.5배로 → 꺾은선이 차트 상단 공간 충분히 활용
-                        max: Math.max(...fuelByMonth) * 1.5 || 100,
+                        // 연료 max를 1.2배로 → 꺾은선이 상단 넓게 활용
+                        max: Math.ceil(Math.max(...fuelByMonth) * 1.2) || 100,
                         ticks: { font: { size: 10 }, callback: v => v ? v+(isEV?'k':'L') : '0' },
                         grid: { drawOnChartArea: false }
                     },
